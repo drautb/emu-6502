@@ -405,15 +405,19 @@ fn load_instruction(opcode: u8) -> Instruction {
 }
 
 const PN_MASK: u8 = 0b10000000;
-// const PV_MASK: u8 = 0b01000000;
+const PV_MASK: u8 = 0b01000000;
 // const PB_MASK: u8 = 0b00010000;
 // const PD_MASK: u8 = 0b00001000;
 // const PI_MASK: u8 = 0b00000100;
 const PZ_MASK: u8 = 0b00000010;
-// const PC_MASK: u8 = 0b00000001;
+const PC_MASK: u8 = 0b00000001;
 
 fn inc_wrap(n: u8) -> u8 {
-    (Wrapping(n) + Wrapping(1)).0
+    add_wrap(n, 1)
+}
+
+fn add_wrap(n1: u8, n2: u8) -> u8 {
+    (Wrapping(n1) + Wrapping(n2)).0
 }
 
 #[derive(PartialEq)]
@@ -538,21 +542,31 @@ impl Cpu {
         let instruction = load_instruction(opcode);
         self.ir = opcode;
         match instruction {
+            Instruction::ADC(_, address_mode) => {
+                let n1 = self.a;
+                let n2 = self.resolve_operand(&address_mode, rom, mem);
+                self.a = add_wrap(n1, n2);
+                self.update_status_nz(self.a);
+                self.update_status_c(self.a, n1);
+                self.update_status_v(self.a, n1, n2);
+                self.update_pc(address_mode);
+            }
+
             Instruction::AND(_, address_mode) => {
                 self.a &= self.resolve_operand(&address_mode, rom, mem);
-                self.update_pnz(self.a);
+                self.update_status_nz(self.a);
                 self.update_pc(address_mode);
             }
 
             Instruction::INX(_) => {
                 self.x = inc_wrap(self.x);
-                self.update_pnz(self.x);
+                self.update_status_nz(self.x);
                 self.incr_pc();
             }
 
             Instruction::INY(_) => {
                 self.y = inc_wrap(self.y);
-                self.update_pnz(self.y);
+                self.update_status_nz(self.y);
                 self.incr_pc();
             }
 
@@ -714,12 +728,33 @@ impl Cpu {
         (new_addr_h << 8) | new_addr_l
     }
 
-    fn update_pnz(&mut self, value: u8) {
+    fn update_status_nz(&mut self, value: u8) {
+        // Negative
         self.p = (PN_MASK & value) | (!PN_MASK & self.p);
+
+        // Zero
         if value == 0 {
             self.p |= PZ_MASK;
         } else {
             self.p &= !PZ_MASK;
+        }
+    }
+
+    fn update_status_c(&mut self, result: u8, original: u8) {
+        // Carry
+        if original > result {
+            self.p |= PC_MASK;
+        } else {
+            self.p &= !PC_MASK;
+        }
+    }
+
+    fn update_status_v(&mut self, result: u8, n1: u8, n2: u8) {
+        // oVerflow
+        if n1 & PN_MASK == n2 & PN_MASK && n1 & PN_MASK != result & PN_MASK {
+            self.p |= PV_MASK;
+        } else {
+            self.p &= !PV_MASK;
         }
     }
 
@@ -755,6 +790,50 @@ mod tests {
         cpu.reset();
 
         assert_eq!(cpu, Cpu::new());
+    }
+
+    mod adc_tests {
+        use super::*;
+
+        #[test]
+        fn adc() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 40;
+            cpu.p = PC_MASK | PZ_MASK | PN_MASK | PV_MASK; // These should all be cleared
+            let rom = vec![0x69, 2];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x69,
+                    pc: 2,
+                    a: 42,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn adc_carry() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 255;
+            let rom = vec![0x69, 1];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x69,
+                    pc: 2,
+                    a: 0,
+                    p: PZ_MASK | PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
     }
 
     mod and_tests {
@@ -1333,6 +1412,39 @@ mod tests {
             );
 
             assert_eq!(mem[0x6002], 57);
+        }
+    }
+
+    mod cpu_status_tests {
+        use super::*;
+
+        #[test]
+        fn overflow_flag() {
+            let mut cpu = Cpu::new();
+
+            cpu.update_status_v(0, 0, 0);
+            assert_eq!(cpu.p, 0);
+
+            cpu.update_status_v(0b10000001, 0, 0);
+            assert_eq!(cpu.p, PV_MASK);
+
+            cpu.update_status_v(0, 0b10000001, 0);
+            assert_eq!(cpu.p, 0);
+
+            cpu.update_status_v(0, 0, 0b10000001);
+            assert_eq!(cpu.p, 0);
+
+            cpu.update_status_v(0b10000001, 0b10000001, 0);
+            assert_eq!(cpu.p, 0);
+
+            cpu.update_status_v(0b10000001, 0, 0b10000001);
+            assert_eq!(cpu.p, 0);
+
+            cpu.update_status_v(0, 0b10000001, 0b10000001);
+            assert_eq!(cpu.p, PV_MASK);
+
+            cpu.update_status_v(0b10000001, 0b10000001, 0b10000001);
+            assert_eq!(cpu.p, 0);
         }
     }
 }
