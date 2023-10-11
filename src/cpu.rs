@@ -12,18 +12,18 @@ use std::ops::IndexMut;
 
 #[derive(Debug)]
 enum AddressMode {
+    ACC,
+    IMMEDIATE,
     ABS,
-    AII,
     AIX,
     AIY,
     AI,
-    ACC,
-    IMMEDIATE,
+    AII,
     ZP,
-    ZPII,
     ZPIX,
     ZPIY,
     ZPI,
+    ZPII,
     ZPIIY,
 }
 
@@ -529,8 +529,6 @@ impl Cpu {
         self.s = 0;
     }
 
-    // TODO: Nest matches to avoid repeating logic for the same instruction in diff modes
-
     pub fn step<M, R>(&mut self, rom: &R, mem: &mut M)
     where
         R: Index<usize, Output = u8>,
@@ -540,50 +538,10 @@ impl Cpu {
         let instruction = load_instruction(opcode);
         self.ir = opcode;
         match instruction {
-            Instruction::AND(_, AddressMode::IMMEDIATE) => {
-                self.a &= self.one_byte_operand(rom);
+            Instruction::AND(_, address_mode) => {
+                self.a &= self.resolve_operand(&address_mode, rom, mem);
                 self.update_pnz(self.a);
-                self.update_pc(AddressMode::IMMEDIATE);
-            }
-            Instruction::AND(_, AddressMode::ABS) => {
-                self.a &= self.deref_abs(rom, mem);
-                self.update_pnz(self.a);
-                self.update_pc(AddressMode::ABS);
-            }
-            Instruction::AND(_, AddressMode::AIX) => {
-                self.a &= self.deref_aix(rom, mem);
-                self.update_pnz(self.a);
-                self.update_pc(AddressMode::AIX);
-            }
-            Instruction::AND(_, AddressMode::AIY) => {
-                self.a &= self.deref_aiy(rom, mem);
-                self.update_pnz(self.a);
-                self.update_pc(AddressMode::AIY);
-            }
-            Instruction::AND(_, AddressMode::ZP) => {
-                self.a &= self.deref_zp(rom, mem);
-                self.update_pnz(self.a);
-                self.update_pc(AddressMode::ZP);
-            }
-            Instruction::AND(_, AddressMode::ZPIX) => {
-                self.a &= self.deref_zpix(rom, mem);
-                self.update_pnz(self.a);
-                self.update_pc(AddressMode::ZPIX);
-            }
-            Instruction::AND(_, AddressMode::ZPI) => {
-                self.a &= self.deref_zpi(rom, mem);
-                self.update_pnz(self.a);
-                self.update_pc(AddressMode::ZPI);
-            }
-            Instruction::AND(_, AddressMode::ZPII) => {
-                self.a &= self.deref_zpii(rom, mem);
-                self.update_pnz(self.a);
-                self.update_pc(AddressMode::ZPII);
-            }
-            Instruction::AND(_, AddressMode::ZPIIY) => {
-                self.a &= self.deref_zpiiy(rom, mem);
-                self.update_pnz(self.a);
-                self.update_pc(AddressMode::ZPIIY);
+                self.update_pc(address_mode);
             }
 
             Instruction::INX(_) => {
@@ -636,6 +594,31 @@ impl Cpu {
             instruction => {
                 println!("Not implemented: {:?}", instruction);
                 todo!();
+            }
+        }
+    }
+
+    fn resolve_operand<R, M>(&mut self, address_mode: &AddressMode, rom: &R, mem: &mut M) -> u8
+    where
+        R: Index<usize, Output = u8>,
+        M: IndexMut<usize, Output = u8>,
+    {
+        match address_mode {
+            AddressMode::IMMEDIATE => self.one_byte_operand(rom),
+            AddressMode::ABS => self.deref_abs(rom, mem),
+            AddressMode::AIX => self.deref_aix(rom, mem),
+            AddressMode::AIY => self.deref_aiy(rom, mem),
+            AddressMode::ZP => self.deref_zp(rom, mem),
+            AddressMode::ZPIX => self.deref_zpix(rom, mem),
+            AddressMode::ZPI => self.deref_zpi(rom, mem),
+            AddressMode::ZPII => self.deref_zpii(rom, mem),
+            AddressMode::ZPIIY => self.deref_zpiiy(rom, mem),
+            _ => {
+                println!(
+                    "Unable to resolve operand for address mode {:?}",
+                    address_mode
+                );
+                panic!("Unable to resolve operand for address mode");
             }
         }
     }
