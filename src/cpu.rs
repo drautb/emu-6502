@@ -516,8 +516,8 @@ impl Cpu {
 
     pub fn step<M, R>(&mut self, rom: &R, mem: &mut M)
     where
-    R: Index<usize, Output = u8>,
-    M: IndexMut<usize, Output = u8>,
+        R: Index<usize, Output = u8>,
+        M: IndexMut<usize, Output = u8>,
     {
         let opcode = rom[self.pc];
         let instruction = load_instruction(opcode);
@@ -729,7 +729,6 @@ impl Cpu {
             self.p &= !PZ_MASK;
         }
     }
-
 }
 
 #[cfg(test)]
