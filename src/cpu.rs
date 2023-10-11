@@ -634,7 +634,7 @@ impl Cpu {
         (op_h << 8) | op_l
     }
 
-    fn deref_abs<R, M>(&mut self, rom: &R, mem: &mut M) -> u8
+    fn deref_abs<R, M>(&mut self, rom: &R, mem: &M) -> u8
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
@@ -642,7 +642,7 @@ impl Cpu {
         mem[self.two_byte_operand(rom) as usize]
     }
 
-    fn deref_aix<R, M>(&mut self, rom: &R, mem: &mut M) -> u8
+    fn deref_aix<R, M>(&self, rom: &R, mem: &M) -> u8
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
@@ -650,7 +650,7 @@ impl Cpu {
         mem[(self.two_byte_operand(rom) + self.x as u16) as usize]
     }
 
-    fn deref_aiy<R, M>(&mut self, rom: &R, mem: &mut M) -> u8
+    fn deref_aiy<R, M>(&self, rom: &R, mem: &M) -> u8
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
@@ -658,7 +658,7 @@ impl Cpu {
         mem[(self.two_byte_operand(rom) + self.y as u16) as usize]
     }
 
-    fn deref_zp<R, M>(&mut self, rom: &R, mem: &mut M) -> u8
+    fn deref_zp<R, M>(&self, rom: &R, mem: &M) -> u8
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
@@ -666,7 +666,7 @@ impl Cpu {
         mem[self.one_byte_operand(rom) as usize]
     }
 
-    fn deref_zpix<R, M>(&mut self, rom: &R, mem: &mut M) -> u8
+    fn deref_zpix<R, M>(&self, rom: &R, mem: &M) -> u8
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
@@ -674,7 +674,7 @@ impl Cpu {
         mem[(self.one_byte_operand(rom) + self.x) as usize]
     }
 
-    fn deref_zpi<R, M>(&mut self, rom: &R, mem: &mut M) -> u8
+    fn deref_zpi<R, M>(&self, rom: &R, mem: &M) -> u8
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
@@ -684,7 +684,7 @@ impl Cpu {
         mem[operand_address as usize]
     }
 
-    fn deref_zpii<R, M>(&mut self, rom: &R, mem: &mut M) -> u8
+    fn deref_zpii<R, M>(&self, rom: &R, mem: &M) -> u8
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
@@ -694,7 +694,7 @@ impl Cpu {
         mem[operand_address as usize]
     }
 
-    fn deref_zpiiy<R, M>(&mut self, rom: &R, mem: &mut M) -> u8
+    fn deref_zpiiy<R, M>(&self, rom: &R, mem: &M) -> u8
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
@@ -710,7 +710,7 @@ impl Cpu {
         mem[indirect_address as usize]
     }
 
-    fn deref_mem<M>(&mut self, mem: &mut M, addr: usize) -> u16
+    fn deref_mem<M>(&self, mem: &M, addr: usize) -> u16
     where
         M: IndexMut<usize, Output = u8>,
     {
