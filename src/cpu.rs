@@ -556,16 +556,11 @@ impl Cpu {
                 self.incr_pc();
             }
 
-            Instruction::JMP(_, AddressMode::ABS) => {
-                let new_pc = self.two_byte_operand(rom);
-                self.pc = new_pc as usize;
-            }
-
+            Instruction::JMP(_, AddressMode::ABS) => self.pc = self.two_byte_operand(rom) as usize,
             Instruction::JMP(_, AddressMode::AI) => {
                 let new_pc_addr = self.two_byte_operand(rom) as usize;
                 self.pc = self.deref_mem(mem, new_pc_addr) as usize;
             }
-
             Instruction::JMP(_, AddressMode::AII) => {
                 let new_pc_addr: usize = (self.two_byte_operand(rom) + self.x as u16) as usize;
                 self.pc = self.deref_mem(mem, new_pc_addr) as usize;
