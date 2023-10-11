@@ -489,6 +489,24 @@ impl fmt::Display for Cpu {
 }
 
 impl Cpu {
+    fn instruction_length(address_mode: AddressMode) -> usize {
+        match address_mode {
+            AddressMode::ACC => 1,
+            AddressMode::IMMEDIATE => 2,
+            AddressMode::ABS => 3,
+            AddressMode::AIX => 3,
+            AddressMode::AIY => 3,
+            AddressMode::AI => 3,
+            AddressMode::AII => 3,
+            AddressMode::ZP => 2,
+            AddressMode::ZPIX => 2,
+            AddressMode::ZPIY => 2,
+            AddressMode::ZPI => 2,
+            AddressMode::ZPII => 2,
+            AddressMode::ZPIIY => 2,
+        }
+    }
+
     pub fn new() -> Self {
         Cpu {
             ir: 0,
@@ -511,7 +529,6 @@ impl Cpu {
         self.s = 0;
     }
 
-    // TODO: PC increments map to address modes - extract this to a function
     // TODO: Nest matches to avoid repeating logic for the same instruction in diff modes
 
     pub fn step<M, R>(&mut self, rom: &R, mem: &mut M)
@@ -526,59 +543,59 @@ impl Cpu {
             Instruction::AND(_, AddressMode::IMMEDIATE) => {
                 self.a &= self.one_byte_operand(rom);
                 self.update_pnz(self.a);
-                self.pc += 2;
+                self.update_pc(AddressMode::IMMEDIATE);
             }
             Instruction::AND(_, AddressMode::ABS) => {
                 self.a &= self.deref_abs(rom, mem);
                 self.update_pnz(self.a);
-                self.pc += 3;
+                self.update_pc(AddressMode::ABS);
             }
             Instruction::AND(_, AddressMode::AIX) => {
                 self.a &= self.deref_aix(rom, mem);
                 self.update_pnz(self.a);
-                self.pc += 3;
+                self.update_pc(AddressMode::AIX);
             }
             Instruction::AND(_, AddressMode::AIY) => {
                 self.a &= self.deref_aiy(rom, mem);
                 self.update_pnz(self.a);
-                self.pc += 3;
+                self.update_pc(AddressMode::AIY);
             }
             Instruction::AND(_, AddressMode::ZP) => {
                 self.a &= self.deref_zp(rom, mem);
                 self.update_pnz(self.a);
-                self.pc += 2;
+                self.update_pc(AddressMode::ZP);
             }
             Instruction::AND(_, AddressMode::ZPIX) => {
                 self.a &= self.deref_zpix(rom, mem);
                 self.update_pnz(self.a);
-                self.pc += 2;
+                self.update_pc(AddressMode::ZPIX);
             }
             Instruction::AND(_, AddressMode::ZPI) => {
                 self.a &= self.deref_zpi(rom, mem);
                 self.update_pnz(self.a);
-                self.pc += 2;
+                self.update_pc(AddressMode::ZPI);
             }
             Instruction::AND(_, AddressMode::ZPII) => {
                 self.a &= self.deref_zpii(rom, mem);
                 self.update_pnz(self.a);
-                self.pc += 2;
+                self.update_pc(AddressMode::ZPII);
             }
             Instruction::AND(_, AddressMode::ZPIIY) => {
                 self.a &= self.deref_zpiiy(rom, mem);
                 self.update_pnz(self.a);
-                self.pc += 2;
+                self.update_pc(AddressMode::ZPIIY);
             }
 
             Instruction::INX(_) => {
                 self.x = inc_wrap(self.x);
                 self.update_pnz(self.x);
-                self.pc += 1;
+                self.incr_pc();
             }
 
             Instruction::INY(_) => {
                 self.y = inc_wrap(self.y);
                 self.update_pnz(self.y);
-                self.pc += 1;
+                self.incr_pc();
             }
 
             Instruction::JMP(_, AddressMode::ABS) => {
@@ -603,17 +620,17 @@ impl Cpu {
 
             Instruction::LDA(_, AddressMode::IMMEDIATE) => {
                 self.a = self.one_byte_operand(rom);
-                self.pc += 2;
+                self.update_pc(AddressMode::IMMEDIATE);
             }
 
             Instruction::NOP(_) => {
-                self.pc += 1;
+                self.incr_pc();
             }
 
             Instruction::STA(_, AddressMode::ABS) => {
                 let addr = self.two_byte_operand(rom);
                 mem[addr as usize] = self.a;
-                self.pc += 3;
+                self.update_pc(AddressMode::ABS);
             }
 
             instruction => {
@@ -728,6 +745,14 @@ impl Cpu {
         } else {
             self.p &= !PZ_MASK;
         }
+    }
+
+    fn update_pc(&mut self, address_mode: AddressMode) {
+        self.pc += Cpu::instruction_length(address_mode);
+    }
+
+    fn incr_pc(&mut self) {
+        self.pc += 1;
     }
 }
 
