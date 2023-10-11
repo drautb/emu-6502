@@ -562,18 +562,13 @@ impl Cpu {
             }
 
             Instruction::JMP(_, AddressMode::AI) => {
-                let new_pc_addr = self.two_byte_operand(rom);
-                let new_pcl: u16 = mem[new_pc_addr as usize].into();
-                let new_pch: u16 = mem[(new_pc_addr + 1) as usize].into();
-                self.pc = ((new_pch << 8) | new_pcl) as usize;
+                let new_pc_addr = self.two_byte_operand(rom) as usize;
+                self.pc = self.deref_mem(mem, new_pc_addr) as usize;
             }
 
             Instruction::JMP(_, AddressMode::AII) => {
-                let new_pc_addr: u16 = self.two_byte_operand(rom) + self.x as u16;
-                let new_pcl: u16 = mem[new_pc_addr as usize].into();
-                let new_pch: u16 = mem[(new_pc_addr + 1) as usize].into();
-
-                self.pc = ((new_pch << 8) | new_pcl) as usize;
+                let new_pc_addr: usize = (self.two_byte_operand(rom) + self.x as u16) as usize;
+                self.pc = self.deref_mem(mem, new_pc_addr) as usize;
             }
 
             Instruction::LDA(_, AddressMode::IMMEDIATE) => {
@@ -685,9 +680,7 @@ impl Cpu {
         M: IndexMut<usize, Output = u8>,
     {
         let indirect_address = self.one_byte_operand(rom);
-        let operand_address_l: u16 = mem[indirect_address as usize].into();
-        let operand_address_h: u16 = mem[(indirect_address + 1) as usize].into();
-        let operand_address: u16 = (operand_address_h << 8) | operand_address_l;
+        let operand_address: u16 = self.deref_mem(mem, indirect_address as usize);
         mem[operand_address as usize]
     }
 
@@ -697,9 +690,7 @@ impl Cpu {
         M: IndexMut<usize, Output = u8>,
     {
         let indirect_address = self.one_byte_operand(rom) + self.x;
-        let operand_address_l: u16 = mem[indirect_address as usize].into();
-        let operand_address_h: u16 = mem[(indirect_address + 1) as usize].into();
-        let operand_address: u16 = (operand_address_h << 8) | operand_address_l;
+        let operand_address: u16 = self.deref_mem(mem, indirect_address as usize);
         mem[operand_address as usize]
     }
 
@@ -710,15 +701,22 @@ impl Cpu {
     {
         // Deref the zero page pointer
         let zp = self.one_byte_operand(rom);
-        let indirect_base_l: u16 = mem[zp as usize].into();
-        let indirect_base_h: u16 = mem[(zp + 1) as usize].into();
-        let indirect_base = (indirect_base_h << 8) | indirect_base_l;
+        let indirect_base = self.deref_mem(mem, zp as usize);
 
         // Add y to the address found
-        let indirect = indirect_base + self.y as u16;
+        let indirect_address = indirect_base + self.y as u16;
 
         // Deref new address to get operand
-        mem[indirect as usize]
+        mem[indirect_address as usize]
+    }
+
+    fn deref_mem<M>(&mut self, mem: &mut M, addr: usize) -> u16
+    where
+        M: IndexMut<usize, Output = u8>,
+    {
+        let new_addr_l: u16 = mem[addr as usize].into();
+        let new_addr_h: u16 = mem[(addr + 1) as usize].into();
+        (new_addr_h << 8) | new_addr_l
     }
 
     fn update_pnz(&mut self, value: u8) {
