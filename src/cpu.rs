@@ -407,8 +407,8 @@ fn load_instruction(opcode: u8) -> Instruction {
 const PN_MASK: u8 = 0b10000000;
 const PV_MASK: u8 = 0b01000000;
 // const PB_MASK: u8 = 0b00010000;
-// const PD_MASK: u8 = 0b00001000;
-// const PI_MASK: u8 = 0b00000100;
+const PD_MASK: u8 = 0b00001000;
+const PI_MASK: u8 = 0b00000100;
 const PZ_MASK: u8 = 0b00000010;
 const PC_MASK: u8 = 0b00000001;
 
@@ -672,6 +672,26 @@ impl Cpu {
                 }
             }
 
+            Instruction::CLC(_) => {
+                self.clear_status(PC_MASK);
+                self.incr_pc();
+            }
+
+            Instruction::CLD(_) => {
+                self.clear_status(PD_MASK);
+                self.incr_pc();
+            }
+
+            Instruction::CLI(_) => {
+                self.clear_status(PI_MASK);
+                self.incr_pc();
+            }
+
+            Instruction::CLV(_) => {
+                self.clear_status(PV_MASK);
+                self.incr_pc();
+            }
+
             Instruction::INX(_) => {
                 self.x = inc_wrap(self.x);
                 self.update_status_nz(self.x);
@@ -880,10 +900,18 @@ impl Cpu {
     fn update_status_v(&mut self, result: u8, n1: u8, n2: u8) {
         // oVerflow
         if n1 & PN_MASK == n2 & PN_MASK && n1 & PN_MASK != result & PN_MASK {
-            self.p |= PV_MASK;
+            self.set_status(PV_MASK);
         } else {
-            self.p &= !PV_MASK;
+            self.clear_status(PV_MASK);
         }
+    }
+
+    fn clear_status(&mut self, mask: u8) {
+        self.p &= !mask;
+    }
+
+    fn set_status(&mut self, mask: u8) {
+        self.p |= mask
     }
 
     fn update_pc(&mut self, address_mode: AddressMode) {
@@ -1775,6 +1803,82 @@ mod tests {
                     pc: 2,
                     a: 1,
                     p: PN_MASK | PV_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+    }
+
+    mod clear_tests {
+        use super::*;
+
+        #[test]
+        fn clc() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PC_MASK;
+            let rom = vec![0x18];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x18,
+                    pc: 1,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn cld() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PD_MASK;
+            let rom = vec![0xD8];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xD8,
+                    pc: 1,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn cli() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PI_MASK;
+            let rom = vec![0x58];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x58,
+                    pc: 1,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn clv() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PV_MASK;
+            let rom = vec![0xB8];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xB8,
+                    pc: 1,
                     ..Cpu::new()
                 }
             )
