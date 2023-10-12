@@ -611,6 +611,14 @@ impl Cpu {
                 }
             }
 
+            Instruction::BEQ(_) => {
+                self.pc += if self.p & PZ_MASK > 0 {
+                    self.second_byte_operand(rom) as usize
+                } else {
+                    2
+                }
+            }
+
             Instruction::INX(_) => {
                 self.x = inc_wrap(self.x);
                 self.update_status_nz(self.x);
@@ -1435,6 +1443,42 @@ mod tests {
                     ir: 0xB0,
                     pc: 0xCD,
                     p: PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn beq_no_branch() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xF0, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xF0,
+                    pc: 2,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn beq_branch() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK;
+            let rom = vec![0xF0, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xF0,
+                    pc: 0xCD,
+                    p: PZ_MASK,
                     ..Cpu::new()
                 }
             )
