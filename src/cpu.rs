@@ -595,6 +595,22 @@ impl Cpu {
                 }
             }
 
+            Instruction::BCC(_) => {
+                self.pc += if self.p & PC_MASK == 0 {
+                    self.second_byte_operand(rom) as usize
+                } else {
+                    2
+                }
+            }
+
+            Instruction::BCS(_) => {
+                self.pc += if self.p & PC_MASK > 0 {
+                    self.second_byte_operand(rom) as usize
+                } else {
+                    2
+                }
+            }
+
             Instruction::INX(_) => {
                 self.x = inc_wrap(self.x);
                 self.update_status_nz(self.x);
@@ -1265,7 +1281,7 @@ mod tests {
         }
     }
 
-    mod bbr_tests {
+    mod branch_tests {
         use super::*;
 
         #[test]
@@ -1309,10 +1325,6 @@ mod tests {
                 )
             }
         }
-    }
-
-    mod bbs_test {
-        use super::*;
 
         #[test]
         fn bbs_no_branch() {
@@ -1354,6 +1366,78 @@ mod tests {
                     }
                 )
             }
+        }
+
+        #[test]
+        fn bcc_no_branch() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PC_MASK;
+            let rom = vec![0x90, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x90,
+                    pc: 2,
+                    p: PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bcc_branch() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x90, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x90,
+                    pc: 0xCD,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bcs_no_branch() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xB0, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xB0,
+                    pc: 2,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bcs_branch() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PC_MASK;
+            let rom = vec![0xB0, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xB0,
+                    pc: 0xCD,
+                    p: PC_MASK,
+                    ..Cpu::new()
+                }
+            )
         }
     }
 
