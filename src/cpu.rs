@@ -419,6 +419,10 @@ fn inc_wrap(n: u8) -> u8 {
     add_wrap(n, 1)
 }
 
+fn dec_wrap(n: u8) -> u8 {
+    sub_wrap(n, 1)
+}
+
 fn add_wrap(n1: u8, n2: u8) -> u8 {
     (Wrapping(n1) + Wrapping(n2)).0
 }
@@ -696,13 +700,25 @@ impl Cpu {
             Instruction::CMP(_, address_mode) => {
                 self.cmp_register(rom, mem, address_mode, self.a);
             }
-
             Instruction::CPX(_, address_mode) => {
                 self.cmp_register(rom, mem, address_mode, self.x);
             }
-
             Instruction::CPY(_, address_mode) => {
                 self.cmp_register(rom, mem, address_mode, self.y);
+            }
+
+            Instruction::DEC(_, AddressMode::ACC) => {
+                self.a = dec_wrap(self.a);
+                self.update_status_nz(self.a);
+                self.incr_pc();
+            }
+            Instruction::DEC(_, address_mode) => {
+                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let val = mem[resolved_addr];
+                let result = dec_wrap(val);
+                mem[resolved_addr] = result;
+                self.update_status_nz(result);
+                self.update_pc(address_mode);
             }
 
             Instruction::INX(_) => {
@@ -2100,6 +2116,134 @@ mod tests {
                     ..Cpu::new()
                 }
             )
+        }
+    }
+
+    mod dec_tests {
+        use super::*;
+
+        #[test]
+        fn dec_acc() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 10;
+            cpu.p = PZ_MASK | PN_MASK; // Should get cleared
+            let rom = vec![0x3A];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x3A,
+                    pc: 1,
+                    a: 9,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn dec_acc_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 1;
+            cpu.p = PN_MASK; // Should get cleared
+            let rom = vec![0x3A];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x3A,
+                    pc: 1,
+                    a: 0,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn dec_acc_neg() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 0;
+            cpu.p = PZ_MASK; // Should get cleared
+            let rom = vec![0x3A];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x3A,
+                    pc: 1,
+                    a: 255,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn dec_abs() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK | PN_MASK; // Should get cleared
+            mem[0xABCD] = 10;
+            let rom = vec![0xCE, 0xCD, 0xAB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xCE,
+                    pc: 3,
+                    ..Cpu::new()
+                }
+            );
+            assert_eq!(mem[0xABCD], 9);
+        }
+
+        #[test]
+        fn dec_abs_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should get cleared
+            mem[0xABCD] = 1;
+            let rom = vec![0xCE, 0xCD, 0xAB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xCE,
+                    pc: 3,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+            assert_eq!(mem[0xABCD], 0);
+        }
+
+        #[test]
+        fn dec_abs_neg() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK; // Should get cleared
+            mem[0xABCD] = 0;
+            let rom = vec![0xCE, 0xCD, 0xAB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xCE,
+                    pc: 3,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+            assert_eq!(mem[0xABCD], 255);
         }
     }
 
