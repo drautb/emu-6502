@@ -5,9 +5,9 @@ use std::io::{stdin, stdout, Read, Write};
 
 fn pause() {
     let mut stdout = stdout();
-    stdout.write(b"Press any key to continue...").unwrap();
+    stdout.write_all(b"Press any key to continue...").unwrap();
     stdout.flush().unwrap();
-    stdin().read(&mut [0]).unwrap();
+    stdin().read_exact(&mut [0]).unwrap();
 }
 
 fn main() {

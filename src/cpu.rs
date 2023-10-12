@@ -1,4 +1,5 @@
 #![allow(non_camel_case_types)]
+#![allow(clippy::upper_case_acronyms)]
 
 /**
  * https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf
@@ -498,6 +499,12 @@ impl fmt::Display for Cpu {
     }
 }
 
+impl Default for Cpu {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Cpu {
     fn instruction_length(address_mode: AddressMode) -> usize {
         match address_mode {
@@ -871,8 +878,8 @@ impl Cpu {
     where
         M: IndexMut<usize, Output = u8>,
     {
-        let new_addr_l: u16 = mem[addr as usize].into();
-        let new_addr_h: u16 = mem[(addr + 1) as usize].into();
+        let new_addr_l: u16 = mem[addr].into();
+        let new_addr_h: u16 = mem[addr + 1].into();
         (new_addr_h << 8) | new_addr_l
     }
 
