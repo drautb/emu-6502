@@ -412,6 +412,8 @@ const PV_MASK: u8 = 0b01000000;
 const PZ_MASK: u8 = 0b00000010;
 const PC_MASK: u8 = 0b00000001;
 
+const PNV_MASK: u8 = PN_MASK | PV_MASK;
+
 fn inc_wrap(n: u8) -> u8 {
     add_wrap(n, 1)
 }
@@ -619,6 +621,13 @@ impl Cpu {
                 }
             }
 
+            Instruction::BIT(_, address_mode) => {
+                let operand = self.resolve_operand(&address_mode, rom, mem);
+                self.p = (self.p & !PNV_MASK) | (operand & PNV_MASK); // Set N and V equal to operand bits 7 and 6 respectively
+                self.update_status_z(self.a & operand);
+                self.update_pc(address_mode)
+            }
+
             Instruction::INX(_) => {
                 self.x = inc_wrap(self.x);
                 self.update_status_nz(self.x);
@@ -804,8 +813,10 @@ impl Cpu {
     fn update_status_nz(&mut self, value: u8) {
         // Negative
         self.p = (PN_MASK & value) | (!PN_MASK & self.p);
+        self.update_status_z(value);
+    }
 
-        // Zero
+    fn update_status_z(&mut self, value: u8) {
         if value == 0 {
             self.p |= PZ_MASK;
         } else {
@@ -1479,6 +1490,50 @@ mod tests {
                     ir: 0xF0,
                     pc: 0xCD,
                     p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+    }
+
+    mod bit_tests {
+        use super::*;
+
+        #[test]
+        fn bit_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK | PV_MASK; // Should get cleared
+            let rom = vec![0x89, 0b0000_0000];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x89,
+                    pc: 2,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bit_nonzero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 0b0000_0001;
+            cpu.p = PZ_MASK; // Should get cleared
+            let rom = vec![0x89, 0b1100_0001];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x89,
+                    pc: 2,
+                    a: 1,
+                    p: PN_MASK | PV_MASK,
                     ..Cpu::new()
                 }
             )
