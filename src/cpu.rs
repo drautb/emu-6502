@@ -558,6 +558,13 @@ impl Cpu {
                 self.update_pc(address_mode);
             }
 
+            Instruction::ASL(_, AddressMode::ACC) => {
+                self.p = (self.p & !PC_MASK) | (self.a >> 7);
+                self.a <<= 1;
+                self.update_status_nz(self.a);
+                self.update_pc(AddressMode::ACC);
+            }
+
             Instruction::INX(_) => {
                 self.x = inc_wrap(self.x);
                 self.update_status_nz(self.x);
@@ -1080,6 +1087,44 @@ mod tests {
                     ..Cpu::new()
                 }
             )
+        }
+    }
+
+    mod asl_tests {
+        use super::*;
+
+        #[test]
+        fn asl_acc() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 0b10100000;
+            let rom = vec![0x0A, 0x0A, 0x0A];
+
+            cpu.step(&rom, &mut mem);
+            assert_eq!(cpu, Cpu {
+                ir: 0x0A,
+                pc: 1,
+                a: 0b01000000,
+                p: 0b00000001,
+                ..Cpu::new()
+            });
+
+            cpu.step(&rom, &mut mem);
+            assert_eq!(cpu, Cpu {
+                ir: 0x0A,
+                pc: 2,
+                a: 0b10000000,
+                p: 0b10000000,
+                ..Cpu::new()
+            });
+
+            cpu.step(&rom, &mut mem);
+            assert_eq!(cpu, Cpu {
+                ir: 0x0A,
+                pc: 3,
+                a: 0b00000000,
+                p: 0b00000011,
+                ..Cpu::new()
+            });
         }
     }
 
