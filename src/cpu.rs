@@ -701,6 +701,22 @@ impl Cpu {
                 self.update_pc(address_mode);
             }
 
+            Instruction::CPX(_, address_mode) => {
+                let operand = self.resolve_operand(&address_mode, rom, mem);
+                let result = sub_wrap(self.x, operand);
+                self.update_status_nz(result);
+                self.update_status_c(result, self.x);
+                self.update_pc(address_mode);
+            }
+
+            Instruction::CPY(_, address_mode) => {
+                let operand = self.resolve_operand(&address_mode, rom, mem);
+                let result = sub_wrap(self.y, operand);
+                self.update_status_nz(result);
+                self.update_status_c(result, self.y);
+                self.update_pc(address_mode);
+            }
+
             Instruction::INX(_) => {
                 self.x = inc_wrap(self.x);
                 self.update_status_nz(self.x);
@@ -1954,6 +1970,132 @@ mod tests {
                     ir: 0xC9,
                     pc: 2,
                     a: 10,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn cpx_equal() {
+            let (mut cpu, mut mem) = setup();
+            cpu.x = 10;
+            cpu.p = PN_MASK;
+            let rom = vec![0xE0, 10];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xE0,
+                    pc: 2,
+                    x: 10,
+                    p: PZ_MASK | PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn cpx_less_than() {
+            let (mut cpu, mut mem) = setup();
+            cpu.x = 10;
+            cpu.p = PZ_MASK | PN_MASK;
+            let rom = vec![0xE0, 9];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xE0,
+                    pc: 2,
+                    x: 10,
+                    p: PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn cpx_greater_than() {
+            let (mut cpu, mut mem) = setup();
+            cpu.x = 10;
+            cpu.p = PZ_MASK | PC_MASK;
+            let rom = vec![0xE0, 11];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xE0,
+                    pc: 2,
+                    x: 10,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn cpy_equal() {
+            let (mut cpu, mut mem) = setup();
+            cpu.y = 10;
+            cpu.p = PN_MASK;
+            let rom = vec![0xC0, 10];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xC0,
+                    pc: 2,
+                    y: 10,
+                    p: PZ_MASK | PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn cpy_less_than() {
+            let (mut cpu, mut mem) = setup();
+            cpu.y = 10;
+            cpu.p = PZ_MASK | PN_MASK;
+            let rom = vec![0xC0, 9];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xC0,
+                    pc: 2,
+                    y: 10,
+                    p: PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn cpy_greater_than() {
+            let (mut cpu, mut mem) = setup();
+            cpu.y = 10;
+            cpu.p = PZ_MASK | PC_MASK;
+            let rom = vec![0xC0, 11];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xC0,
+                    pc: 2,
+                    y: 10,
                     p: PN_MASK,
                     ..Cpu::new()
                 }
