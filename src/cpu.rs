@@ -628,6 +628,50 @@ impl Cpu {
                 self.update_pc(address_mode)
             }
 
+            Instruction::BMI(_) => {
+                self.pc += if self.p & PN_MASK > 0 {
+                    self.second_byte_operand(rom) as usize
+                } else {
+                    2
+                }
+            }
+
+            Instruction::BNE(_) => {
+                self.pc += if self.p & PZ_MASK == 0 {
+                    self.second_byte_operand(rom) as usize
+                } else {
+                    2
+                }
+            }
+
+            Instruction::BPL(_) => {
+                self.pc += if self.p & PN_MASK == 0 {
+                    self.second_byte_operand(rom) as usize
+                } else {
+                    2
+                }
+            }
+
+            Instruction::BRA(_) => {
+                self.pc += self.second_byte_operand(rom) as usize;
+            }
+
+            Instruction::BVC(_) => {
+                self.pc += if self.p & PV_MASK == 0 {
+                    self.second_byte_operand(rom) as usize
+                } else {
+                    2
+                }
+            }
+
+            Instruction::BVS(_) => {
+                self.pc += if self.p & PV_MASK > 0 {
+                    self.second_byte_operand(rom) as usize
+                } else {
+                    2
+                }
+            }
+
             Instruction::INX(_) => {
                 self.x = inc_wrap(self.x);
                 self.update_status_nz(self.x);
@@ -1490,6 +1534,203 @@ mod tests {
                     ir: 0xF0,
                     pc: 0xCD,
                     p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bmi_no_branch() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x30, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x30,
+                    pc: 2,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bmi_branch() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK;
+            let rom = vec![0x30, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x30,
+                    pc: 0xCD,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bne_no_branch() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK;
+            let rom = vec![0xD0, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xD0,
+                    pc: 2,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bne_branch() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xD0, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xD0,
+                    pc: 0xCD,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bpl_no_branch() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK;
+            let rom = vec![0x10, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x10,
+                    pc: 2,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bpl_branch() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x10, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x10,
+                    pc: 0xCD,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bra_branch() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x80, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x80,
+                    pc: 0xCD,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bvc_no_branch() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PV_MASK;
+            let rom = vec![0x50, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x50,
+                    pc: 2,
+                    p: PV_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bvc_branch() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x50, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x50,
+                    pc: 0xCD,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bvs_no_branch() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x70, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x70,
+                    pc: 2,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bvs_branch() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PV_MASK;
+            let rom = vec![0x70, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x70,
+                    pc: 0xCD,
+                    p: PV_MASK,
                     ..Cpu::new()
                 }
             )
