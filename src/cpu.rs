@@ -694,27 +694,15 @@ impl Cpu {
             }
 
             Instruction::CMP(_, address_mode) => {
-                let operand = self.resolve_operand(&address_mode, rom, mem);
-                let result = sub_wrap(self.a, operand);
-                self.update_status_nz(result);
-                self.update_status_c(result, self.a);
-                self.update_pc(address_mode);
+                self.cmp_register(rom, mem, address_mode, self.a);
             }
 
             Instruction::CPX(_, address_mode) => {
-                let operand = self.resolve_operand(&address_mode, rom, mem);
-                let result = sub_wrap(self.x, operand);
-                self.update_status_nz(result);
-                self.update_status_c(result, self.x);
-                self.update_pc(address_mode);
+                self.cmp_register(rom, mem, address_mode, self.x);
             }
 
             Instruction::CPY(_, address_mode) => {
-                let operand = self.resolve_operand(&address_mode, rom, mem);
-                let result = sub_wrap(self.y, operand);
-                self.update_status_nz(result);
-                self.update_status_c(result, self.y);
-                self.update_pc(address_mode);
+                self.cmp_register(rom, mem, address_mode, self.y);
             }
 
             Instruction::INX(_) => {
@@ -945,6 +933,18 @@ impl Cpu {
 
     fn incr_pc(&mut self) {
         self.pc += 1;
+    }
+
+    fn cmp_register<R, M>(&mut self, rom: &R, mem: &M, address_mode: AddressMode, register: u8)
+    where
+        R: Index<usize, Output = u8>,
+        M: IndexMut<usize, Output = u8>,
+    {
+        let operand = self.resolve_operand(&address_mode, rom, mem);
+        let result = sub_wrap(register, operand);
+        self.update_status_nz(result);
+        self.update_status_c(result, register);
+        self.update_pc(address_mode);
     }
 }
 
