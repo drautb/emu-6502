@@ -422,6 +422,10 @@ fn add_wrap(n1: u8, n2: u8) -> u8 {
     (Wrapping(n1) + Wrapping(n2)).0
 }
 
+fn sub_wrap(n1: u8, n2: u8) -> u8 {
+    (Wrapping(n1) - Wrapping(n2)).0
+}
+
 #[derive(PartialEq)]
 pub struct Cpu {
     ir: u8, // instruction register
@@ -566,7 +570,6 @@ impl Cpu {
                 self.update_status_nz(self.a);
                 self.update_pc(AddressMode::ACC);
             }
-
             Instruction::ASL(_, address_mode) => {
                 let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
                 let val = mem[resolved_addr];
@@ -586,7 +589,6 @@ impl Cpu {
                     self.pc += 3;
                 }
             }
-
             Instruction::BBS(_, bit) => {
                 let test = mem[self.resolve_zp(rom)];
                 let offset = self.third_byte_operand(rom);
@@ -604,7 +606,6 @@ impl Cpu {
                     2
                 }
             }
-
             Instruction::BCS(_) => {
                 self.pc += if self.p & PC_MASK > 0 {
                     self.second_byte_operand(rom) as usize
@@ -635,7 +636,6 @@ impl Cpu {
                     2
                 }
             }
-
             Instruction::BNE(_) => {
                 self.pc += if self.p & PZ_MASK == 0 {
                     self.second_byte_operand(rom) as usize
@@ -643,7 +643,6 @@ impl Cpu {
                     2
                 }
             }
-
             Instruction::BPL(_) => {
                 self.pc += if self.p & PN_MASK == 0 {
                     self.second_byte_operand(rom) as usize
@@ -655,7 +654,6 @@ impl Cpu {
             Instruction::BRA(_) => {
                 self.pc += self.second_byte_operand(rom) as usize;
             }
-
             Instruction::BVC(_) => {
                 self.pc += if self.p & PV_MASK == 0 {
                     self.second_byte_operand(rom) as usize
@@ -663,7 +661,6 @@ impl Cpu {
                     2
                 }
             }
-
             Instruction::BVS(_) => {
                 self.pc += if self.p & PV_MASK > 0 {
                     self.second_byte_operand(rom) as usize
@@ -676,20 +673,25 @@ impl Cpu {
                 self.clear_status(PC_MASK);
                 self.incr_pc();
             }
-
             Instruction::CLD(_) => {
                 self.clear_status(PD_MASK);
                 self.incr_pc();
             }
-
             Instruction::CLI(_) => {
                 self.clear_status(PI_MASK);
                 self.incr_pc();
             }
-
             Instruction::CLV(_) => {
                 self.clear_status(PV_MASK);
                 self.incr_pc();
+            }
+
+            Instruction::CMP(_, address_mode) => {
+                let operand = self.resolve_operand(&address_mode, rom, mem);
+                let result = sub_wrap(self.a, operand);
+                self.update_status_nz(result);
+                self.update_status_c(result, self.a);
+                self.update_pc(address_mode);
             }
 
             Instruction::INX(_) => {
@@ -1879,6 +1881,73 @@ mod tests {
                 Cpu {
                     ir: 0xB8,
                     pc: 1,
+                    ..Cpu::new()
+                }
+            )
+        }
+    }
+
+    mod cmp_tests {
+        use super::*;
+
+        #[test]
+        fn cmp_equal() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 10;
+            cpu.p = PN_MASK;
+            let rom = vec![0xC9, 10];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xC9,
+                    pc: 2,
+                    a: 10,
+                    p: PZ_MASK | PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn cmp_less_than() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 10;
+            cpu.p = PZ_MASK | PN_MASK;
+            let rom = vec![0xC9, 9];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xC9,
+                    pc: 2,
+                    a: 10,
+                    p: PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn cmp_greater_than() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 10;
+            cpu.p = PZ_MASK | PC_MASK;
+            let rom = vec![0xC9, 11];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xC9,
+                    pc: 2,
+                    a: 10,
+                    p: PN_MASK,
                     ..Cpu::new()
                 }
             )
