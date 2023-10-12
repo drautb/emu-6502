@@ -575,6 +575,26 @@ impl Cpu {
                 self.update_pc(address_mode);
             }
 
+            Instruction::BBR(_, bit) => {
+                let test = mem[self.resolve_zp(rom)];
+                let offset = self.third_byte_operand(rom);
+                if test & (1 << bit) == 0 {
+                    self.pc += offset as usize;
+                } else {
+                    self.pc += 3;
+                }
+            }
+
+            Instruction::BBS(_, bit) => {
+                let test = mem[self.resolve_zp(rom)];
+                let offset = self.third_byte_operand(rom);
+                if test & (1 << bit) > 0 {
+                    self.pc += offset as usize;
+                } else {
+                    self.pc += 3;
+                }
+            }
+
             Instruction::INX(_) => {
                 self.x = inc_wrap(self.x);
                 self.update_status_nz(self.x);
@@ -598,7 +618,7 @@ impl Cpu {
             }
 
             Instruction::LDA(_, AddressMode::IMMEDIATE) => {
-                self.a = self.one_byte_operand(rom);
+                self.a = self.second_byte_operand(rom);
                 self.update_pc(AddressMode::IMMEDIATE);
             }
 
@@ -649,16 +669,23 @@ impl Cpu {
         M: IndexMut<usize, Output = u8>,
     {
         match address_mode {
-            AddressMode::IMMEDIATE => self.one_byte_operand(rom),
+            AddressMode::IMMEDIATE => self.second_byte_operand(rom),
             _ => mem[self.resolve_operand_addr(address_mode, rom, mem)],
         }
     }
 
-    fn one_byte_operand<R>(&self, rom: &R) -> u8
+    fn second_byte_operand<R>(&self, rom: &R) -> u8
     where
         R: Index<usize, Output = u8>,
     {
         rom[self.pc + 1]
+    }
+
+    fn third_byte_operand<R>(&self, rom: &R) -> u8
+    where
+        R: Index<usize, Output = u8>,
+    {
+        rom[self.pc + 2]
     }
 
     fn two_byte_operand<R>(&self, rom: &R) -> u16
@@ -695,14 +722,14 @@ impl Cpu {
     where
         R: Index<usize, Output = u8>,
     {
-        self.one_byte_operand(rom) as usize
+        self.second_byte_operand(rom) as usize
     }
 
     fn resolve_zpix<R>(&self, rom: &R) -> usize
     where
         R: Index<usize, Output = u8>,
     {
-        (self.one_byte_operand(rom) + self.x) as usize
+        (self.second_byte_operand(rom) + self.x) as usize
     }
 
     fn resolve_zpi<R, M>(&self, rom: &R, mem: &M) -> usize
@@ -710,7 +737,7 @@ impl Cpu {
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
-        let indirect_address = self.one_byte_operand(rom);
+        let indirect_address = self.second_byte_operand(rom);
         let operand_address: u16 = self.deref_mem(mem, indirect_address as usize);
         operand_address as usize
     }
@@ -720,7 +747,7 @@ impl Cpu {
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
-        let indirect_address = self.one_byte_operand(rom) + self.x;
+        let indirect_address = self.second_byte_operand(rom) + self.x;
         let operand_address: u16 = self.deref_mem(mem, indirect_address as usize);
         operand_address as usize
     }
@@ -731,7 +758,7 @@ impl Cpu {
         M: IndexMut<usize, Output = u8>,
     {
         // Deref the zero page pointer
-        let zp = self.one_byte_operand(rom);
+        let zp = self.second_byte_operand(rom);
         let indirect_base = self.deref_mem(mem, zp as usize);
 
         // Add y to the address found
@@ -1235,6 +1262,98 @@ mod tests {
                     ..Cpu::new()
                 }
             );
+        }
+    }
+
+    mod bbr_tests {
+        use super::*;
+
+        #[test]
+        fn bbr_no_branch() {
+            for i in 0..8 {
+                let (mut cpu, mut mem) = setup();
+                mem[0x00CD] = 0xFF;
+                let opcode = 0x0F + (i * 0x10);
+                let rom = vec![opcode, 0xCD, 0xBB];
+
+                cpu.step(&rom, &mut mem);
+
+                assert_eq!(
+                    cpu,
+                    Cpu {
+                        ir: opcode,
+                        pc: 3,
+                        ..Cpu::new()
+                    }
+                )
+            }
+        }
+
+        #[test]
+        fn bbr_branch() {
+            for i in 0..8 {
+                let (mut cpu, mut mem) = setup();
+                mem[0x00CD] = 0x00;
+                let opcode = 0x0F + (i * 0x10);
+                let rom = vec![opcode, 0xCD, 0xBB];
+
+                cpu.step(&rom, &mut mem);
+
+                assert_eq!(
+                    cpu,
+                    Cpu {
+                        ir: opcode,
+                        pc: 0xBB,
+                        ..Cpu::new()
+                    }
+                )
+            }
+        }
+    }
+
+    mod bbs_test {
+        use super::*;
+
+        #[test]
+        fn bbs_no_branch() {
+            for i in 0..8 {
+                let (mut cpu, mut mem) = setup();
+                mem[0x00CD] = 0x00;
+                let opcode = 0x8F + (i * 0x10);
+                let rom = vec![opcode, 0xCD, 0xBB];
+
+                cpu.step(&rom, &mut mem);
+
+                assert_eq!(
+                    cpu,
+                    Cpu {
+                        ir: opcode,
+                        pc: 3,
+                        ..Cpu::new()
+                    }
+                )
+            }
+        }
+
+        #[test]
+        fn bbs_branch() {
+            for i in 0..8 {
+                let (mut cpu, mut mem) = setup();
+                mem[0x00CD] = 0xFF;
+                let opcode = 0x8F + (i * 0x10);
+                let rom = vec![opcode, 0xCD, 0xBB];
+
+                cpu.step(&rom, &mut mem);
+
+                assert_eq!(
+                    cpu,
+                    Cpu {
+                        ir: opcode,
+                        pc: 0xBB,
+                        ..Cpu::new()
+                    }
+                )
+            }
         }
     }
 
