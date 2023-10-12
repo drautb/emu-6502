@@ -565,6 +565,16 @@ impl Cpu {
                 self.update_pc(AddressMode::ACC);
             }
 
+            Instruction::ASL(_, address_mode) => {
+                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let val = mem[resolved_addr];
+                self.p = (self.p & !PC_MASK) | (val >> 7);
+                let result = val << 1;
+                mem[resolved_addr] = result;
+                self.update_status_nz(result);
+                self.update_pc(address_mode);
+            }
+
             Instruction::INX(_) => {
                 self.x = inc_wrap(self.x);
                 self.update_status_nz(self.x);
@@ -609,28 +619,38 @@ impl Cpu {
         }
     }
 
-    fn resolve_operand<R, M>(&mut self, address_mode: &AddressMode, rom: &R, mem: &mut M) -> u8
+    fn resolve_operand_addr<R, M>(&mut self, address_mode: &AddressMode, rom: &R, mem: &M) -> usize
+    where
+        R: Index<usize, Output = u8>,
+        M: IndexMut<usize, Output = u8>,
+    {
+        match address_mode {
+            AddressMode::ABS => self.resolve_abs(rom),
+            AddressMode::AIX => self.resolve_aix(rom),
+            AddressMode::AIY => self.resolve_aiy(rom),
+            AddressMode::ZP => self.resolve_zp(rom),
+            AddressMode::ZPIX => self.resolve_zpix(rom),
+            AddressMode::ZPI => self.resolve_zpi(rom, mem),
+            AddressMode::ZPII => self.resolve_zpii(rom, mem),
+            AddressMode::ZPIIY => self.resolve_zpiiy(rom, mem),
+            _ => {
+                println!(
+                    "Unable to resolve operand address for mode {:?}",
+                    address_mode
+                );
+                panic!("Unable to resolve operand address for mode");
+            }
+        }
+    }
+
+    fn resolve_operand<R, M>(&mut self, address_mode: &AddressMode, rom: &R, mem: &M) -> u8
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
         match address_mode {
             AddressMode::IMMEDIATE => self.one_byte_operand(rom),
-            AddressMode::ABS => self.deref_abs(rom, mem),
-            AddressMode::AIX => self.deref_aix(rom, mem),
-            AddressMode::AIY => self.deref_aiy(rom, mem),
-            AddressMode::ZP => self.deref_zp(rom, mem),
-            AddressMode::ZPIX => self.deref_zpix(rom, mem),
-            AddressMode::ZPI => self.deref_zpi(rom, mem),
-            AddressMode::ZPII => self.deref_zpii(rom, mem),
-            AddressMode::ZPIIY => self.deref_zpiiy(rom, mem),
-            _ => {
-                println!(
-                    "Unable to resolve operand for address mode {:?}",
-                    address_mode
-                );
-                panic!("Unable to resolve operand for address mode");
-            }
+            _ => mem[self.resolve_operand_addr(address_mode, rom, mem)],
         }
     }
 
@@ -650,67 +670,62 @@ impl Cpu {
         (op_h << 8) | op_l
     }
 
-    fn deref_abs<R, M>(&mut self, rom: &R, mem: &M) -> u8
+    fn resolve_abs<R>(&mut self, rom: &R) -> usize
     where
         R: Index<usize, Output = u8>,
-        M: IndexMut<usize, Output = u8>,
     {
-        mem[self.two_byte_operand(rom) as usize]
+        self.two_byte_operand(rom) as usize
     }
 
-    fn deref_aix<R, M>(&self, rom: &R, mem: &M) -> u8
+    fn resolve_aix<R>(&self, rom: &R) -> usize
     where
         R: Index<usize, Output = u8>,
-        M: IndexMut<usize, Output = u8>,
     {
-        mem[(self.two_byte_operand(rom) + self.x as u16) as usize]
+        (self.two_byte_operand(rom) + self.x as u16) as usize
     }
 
-    fn deref_aiy<R, M>(&self, rom: &R, mem: &M) -> u8
+    fn resolve_aiy<R>(&self, rom: &R) -> usize
     where
         R: Index<usize, Output = u8>,
-        M: IndexMut<usize, Output = u8>,
     {
-        mem[(self.two_byte_operand(rom) + self.y as u16) as usize]
+        (self.two_byte_operand(rom) + self.y as u16) as usize
     }
 
-    fn deref_zp<R, M>(&self, rom: &R, mem: &M) -> u8
+    fn resolve_zp<R>(&self, rom: &R) -> usize
     where
         R: Index<usize, Output = u8>,
-        M: IndexMut<usize, Output = u8>,
     {
-        mem[self.one_byte_operand(rom) as usize]
+        self.one_byte_operand(rom) as usize
     }
 
-    fn deref_zpix<R, M>(&self, rom: &R, mem: &M) -> u8
+    fn resolve_zpix<R>(&self, rom: &R) -> usize
     where
         R: Index<usize, Output = u8>,
-        M: IndexMut<usize, Output = u8>,
     {
-        mem[(self.one_byte_operand(rom) + self.x) as usize]
+        (self.one_byte_operand(rom) + self.x) as usize
     }
 
-    fn deref_zpi<R, M>(&self, rom: &R, mem: &M) -> u8
+    fn resolve_zpi<R, M>(&self, rom: &R, mem: &M) -> usize
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
         let indirect_address = self.one_byte_operand(rom);
         let operand_address: u16 = self.deref_mem(mem, indirect_address as usize);
-        mem[operand_address as usize]
+        operand_address as usize
     }
 
-    fn deref_zpii<R, M>(&self, rom: &R, mem: &M) -> u8
+    fn resolve_zpii<R, M>(&self, rom: &R, mem: &M) -> usize
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
         let indirect_address = self.one_byte_operand(rom) + self.x;
         let operand_address: u16 = self.deref_mem(mem, indirect_address as usize);
-        mem[operand_address as usize]
+        operand_address as usize
     }
 
-    fn deref_zpiiy<R, M>(&self, rom: &R, mem: &M) -> u8
+    fn resolve_zpiiy<R, M>(&self, rom: &R, mem: &M) -> usize
     where
         R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
@@ -723,7 +738,7 @@ impl Cpu {
         let indirect_address = indirect_base + self.y as u16;
 
         // Deref new address to get operand
-        mem[indirect_address as usize]
+        indirect_address as usize
     }
 
     fn deref_mem<M>(&self, mem: &M, addr: usize) -> u16
@@ -1100,31 +1115,126 @@ mod tests {
             let rom = vec![0x0A, 0x0A, 0x0A];
 
             cpu.step(&rom, &mut mem);
-            assert_eq!(cpu, Cpu {
-                ir: 0x0A,
-                pc: 1,
-                a: 0b01000000,
-                p: 0b00000001,
-                ..Cpu::new()
-            });
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x0A,
+                    pc: 1,
+                    a: 0b01000000,
+                    p: 0b00000001,
+                    ..Cpu::new()
+                }
+            );
 
             cpu.step(&rom, &mut mem);
-            assert_eq!(cpu, Cpu {
-                ir: 0x0A,
-                pc: 2,
-                a: 0b10000000,
-                p: 0b10000000,
-                ..Cpu::new()
-            });
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x0A,
+                    pc: 2,
+                    a: 0b10000000,
+                    p: 0b10000000,
+                    ..Cpu::new()
+                }
+            );
 
             cpu.step(&rom, &mut mem);
-            assert_eq!(cpu, Cpu {
-                ir: 0x0A,
-                pc: 3,
-                a: 0b00000000,
-                p: 0b00000011,
-                ..Cpu::new()
-            });
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x0A,
+                    pc: 3,
+                    a: 0b00000000,
+                    p: 0b00000011,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn asl_abs() {
+            let (mut cpu, mut mem) = setup();
+            mem[0xABCD] = 0b10100000;
+            let rom = vec![0x0E, 0xCD, 0xAB, 0x0E, 0xCD, 0xAB, 0x0E, 0xCD, 0xAB];
+
+            cpu.step(&rom, &mut mem);
+            assert_eq!(mem[0xABCD], 0b01000000);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x0E,
+                    pc: 3,
+                    p: 0b00000001,
+                    ..Cpu::new()
+                }
+            );
+
+            cpu.step(&rom, &mut mem);
+            assert_eq!(mem[0xABCD], 0b10000000);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x0E,
+                    pc: 6,
+                    p: 0b10000000,
+                    ..Cpu::new()
+                }
+            );
+
+            cpu.step(&rom, &mut mem);
+            assert_eq!(mem[0xABCD], 0b00000000);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x0E,
+                    pc: 9,
+                    p: 0b00000011,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn asl_zp() {
+            let (mut cpu, mut mem) = setup();
+            mem[0x00CD] = 0b10100000;
+            let rom = vec![0x06, 0xCD, 0x06, 0xCD, 0x06, 0xCD];
+
+            cpu.step(&rom, &mut mem);
+            assert_eq!(mem[0x00CD], 0b01000000);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x06,
+                    pc: 2,
+                    p: 0b00000001,
+                    ..Cpu::new()
+                }
+            );
+
+            cpu.step(&rom, &mut mem);
+            assert_eq!(mem[0x00CD], 0b10000000);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x06,
+                    pc: 4,
+                    p: 0b10000000,
+                    ..Cpu::new()
+                }
+            );
+
+            cpu.step(&rom, &mut mem);
+            assert_eq!(mem[0x00CD], 0b00000000);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x06,
+                    pc: 6,
+                    p: 0b00000011,
+                    ..Cpu::new()
+                }
+            );
         }
     }
 
