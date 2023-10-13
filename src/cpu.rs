@@ -864,6 +864,19 @@ impl Cpu {
                 self.pc = ((pch << 8) | pcl) as usize;
             }
 
+            Instruction::SEC(_) => {
+                self.set_status(PC_MASK);
+                self.incr_pc();
+            }
+            Instruction::SED(_) => {
+                self.set_status(PD_MASK);
+                self.incr_pc();
+            }
+            Instruction::SEI(_) => {
+                self.set_status(PI_MASK);
+                self.incr_pc();
+            }
+
             Instruction::STA(_, AddressMode::ABS) => {
                 let addr = self.two_byte_operand(rom);
                 mem[addr as usize] = self.a;
@@ -3806,6 +3819,73 @@ mod tests {
                     ir: 0x6E,
                     pc: 3,
                     p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+    }
+
+    mod sbc_test {
+
+        #[test]
+        #[ignore]
+        fn sbc_immediate() {
+            todo!();
+        }
+    }
+
+    mod set_tests {
+        use super::*;
+
+        #[test]
+        fn sec() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x38];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x38,
+                    pc: 1,
+                    p: PC_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn sed() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xF8];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xF8,
+                    pc: 1,
+                    p: PD_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn sei() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x78];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x78,
+                    pc: 1,
+                    p: PI_MASK,
                     ..Cpu::new()
                 }
             );
