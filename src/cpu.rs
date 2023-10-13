@@ -877,6 +877,13 @@ impl Cpu {
                 self.incr_pc();
             }
 
+            Instruction::SMB(_, bit) => {
+                let mask = 1 << bit;
+                let resolved_addr = self.resolve_operand_addr(&AddressMode::ZP, rom, mem);
+                mem[resolved_addr] |= mask;
+                self.update_pc(AddressMode::ZP);
+            }
+
             Instruction::STA(_, AddressMode::ABS) => {
                 let addr = self.two_byte_operand(rom);
                 mem[addr as usize] = self.a;
@@ -3889,6 +3896,32 @@ mod tests {
                     ..Cpu::new()
                 }
             );
+        }
+    }
+
+    mod smb_tests {
+        use super::*;
+
+        #[test]
+        fn smb_all_bits() {
+            for i in 0..8 {
+                let (mut cpu, mut mem) = setup();
+                mem[0x00CD] = 0;
+                let opcode = 0x87 + (i * 0x10);
+                let rom = vec![opcode, 0xCD];
+
+                cpu.step(&rom, &mut mem);
+
+                assert_eq!(mem[0x00CD], 1 << i);
+                assert_eq!(
+                    cpu,
+                    Cpu {
+                        ir: opcode,
+                        pc: 2,
+                        ..Cpu::new()
+                    }
+                )
+            }
         }
     }
 
