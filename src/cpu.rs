@@ -754,15 +754,9 @@ impl Cpu {
                 self.pc = self.two_byte_operand(rom) as usize;
             }
 
-            Instruction::LDA(_, address_mode) => {
-                self.a = self.load_register(rom, mem, address_mode)
-            }
-            Instruction::LDX(_, address_mode) => {
-                self.x = self.load_register(rom, mem, address_mode)
-            }
-            Instruction::LDY(_, address_mode) => {
-                self.y = self.load_register(rom, mem, address_mode)
-            }
+            Instruction::LDA(_, mode) => self.a = self.load_register(rom, mem, mode),
+            Instruction::LDX(_, mode) => self.x = self.load_register(rom, mem, mode),
+            Instruction::LDY(_, mode) => self.y = self.load_register(rom, mem, mode),
 
             Instruction::LSR(_, AddressMode::ACC) => {
                 self.p = (self.p & !PC_MASK) | (self.a & PC_MASK);
@@ -884,11 +878,10 @@ impl Cpu {
                 self.update_pc(AddressMode::ZP);
             }
 
-            Instruction::STA(_, address_mode) => {
-                let addr = self.resolve_operand_addr(&address_mode, rom, mem);
-                mem[addr] = self.a;
-                self.update_pc(address_mode);
-            }
+            Instruction::STA(_, mode) => self.store_register(rom, mem, mode, self.a),
+            Instruction::STX(_, mode) => self.store_register(rom, mem, mode, self.x),
+            Instruction::STY(_, mode) => self.store_register(rom, mem, mode, self.y),
+            Instruction::STZ(_, mode) => self.store_register(rom, mem, mode, 0),
 
             instruction => {
                 println!("Not implemented: {:?}", instruction);
@@ -1126,6 +1119,16 @@ impl Cpu {
         self.update_status_nz(value);
         self.update_pc(address_mode);
         value
+    }
+
+    fn store_register<R, M>(&mut self, rom: &R, mem: &mut M, address_mode: AddressMode, val: u8)
+    where
+        R: Index<usize, Output = u8>,
+        M: IndexMut<usize, Output = u8>,
+    {
+        let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+        mem[resolved_addr] = val;
+        self.update_pc(address_mode);
     }
 
     fn push_stack_inst<M>(&mut self, mem: &mut M, val: u8)
@@ -3946,7 +3949,7 @@ mod tests {
         }
     }
 
-    mod sta_tests {
+    mod store_tests {
         use super::*;
 
         #[test]
@@ -3995,6 +3998,70 @@ mod tests {
             );
 
             assert_eq!(mem[0x4357], 57);
+        }
+
+        #[test]
+        fn stx_abs() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x8E, 0x02, 0x60];
+
+            cpu.x = 57;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x8E,
+                    x: 57,
+                    pc: 3,
+                    ..Cpu::new()
+                }
+            );
+
+            assert_eq!(mem[0x6002], 57);
+        }
+
+        #[test]
+        fn sty_zp() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x84, 0xCD];
+            cpu.y = 57;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x84,
+                    y: 57,
+                    pc: 2,
+                    ..Cpu::new()
+                }
+            );
+
+            assert_eq!(mem[0x00CD], 57);
+        }
+
+        #[test]
+        fn stz_aix() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x9E, 0xC0, 0xAB];
+            cpu.x = 5;
+            mem[0xABC5] = 42;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x9E,
+                    x: 5,
+                    pc: 3,
+                    ..Cpu::new()
+                }
+            );
+
+            assert_eq!(mem[0xABC5], 0);
         }
     }
 
