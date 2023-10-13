@@ -536,7 +536,7 @@ impl Cpu {
             y: 0,
             p: 0,
             pc: 0,
-            s: 0,
+            s: 0xFF,
         }
     }
 
@@ -547,7 +547,7 @@ impl Cpu {
         self.y = 0;
         self.p = 0;
         self.pc = 0;
-        self.s = 0;
+        self.s = 0xFF;
     }
 
     pub fn step<M, R>(&mut self, rom: &R, mem: &mut M)
