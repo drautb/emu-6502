@@ -791,6 +791,30 @@ impl Cpu {
                 self.update_pc(address_mode);
             }
 
+            Instruction::PHA(_) => self.push_stack_inst(mem, self.a),
+            Instruction::PHP(_) => self.push_stack_inst(mem, self.p),
+            Instruction::PHX(_) => self.push_stack_inst(mem, self.x),
+            Instruction::PHY(_) => self.push_stack_inst(mem, self.y),
+            Instruction::PLA(_) => {
+                self.a = self.pop_stack(mem);
+                self.update_status_nz(self.a);
+                self.incr_pc();
+            }
+            Instruction::PLP(_) => {
+                self.p = self.pop_stack(mem);
+                self.incr_pc();
+            }
+            Instruction::PLX(_) => {
+                self.x = self.pop_stack(mem);
+                self.update_status_nz(self.x);
+                self.incr_pc();
+            }
+            Instruction::PLY(_) => {
+                self.y = self.pop_stack(mem);
+                self.update_status_nz(self.y);
+                self.incr_pc();
+            }
+
             Instruction::STA(_, AddressMode::ABS) => {
                 let addr = self.two_byte_operand(rom);
                 mem[addr as usize] = self.a;
@@ -1035,12 +1059,28 @@ impl Cpu {
         value
     }
 
+    fn push_stack_inst<M>(&mut self, mem: &mut M, val: u8)
+    where
+        M: IndexMut<usize, Output = u8>,
+    {
+        self.push_stack(mem, val);
+        self.incr_pc();
+    }
+
     fn push_stack<M>(&mut self, mem: &mut M, val: u8)
     where
         M: IndexMut<usize, Output = u8>,
     {
         mem[(self.s as u16 + 0x100) as usize] = val;
         self.s -= 1;
+    }
+
+    fn pop_stack<M>(&mut self, mem: &mut M) -> u8
+    where
+        M: IndexMut<usize, Output = u8>,
+    {
+        self.s += 1;
+        mem[(self.s as u16 + 0x100) as usize]
     }
 }
 
@@ -3246,6 +3286,257 @@ mod tests {
                     ir: 0x09,
                     pc: 2,
                     a: 0b1000_0001,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+    }
+
+    mod stack_tests {
+        use super::*;
+
+        #[test]
+        fn pha() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 42;
+            let rom = vec![0x48];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0x01FF], 42);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x48,
+                    pc: 1,
+                    a: 42,
+                    s: 0xFE,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn php() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = 42;
+            let rom = vec![0x08];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0x01FF], 42);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x08,
+                    pc: 1,
+                    p: 42,
+                    s: 0xFE,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn phx() {
+            let (mut cpu, mut mem) = setup();
+            cpu.x = 42;
+            let rom = vec![0xDA];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0x01FF], 42);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xDA,
+                    pc: 1,
+                    x: 42,
+                    s: 0xFE,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn phy() {
+            let (mut cpu, mut mem) = setup();
+            cpu.y = 42;
+            let rom = vec![0x5A];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0x01FF], 42);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x5A,
+                    pc: 1,
+                    y: 42,
+                    s: 0xFE,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn pla_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 42;
+            cpu.s = 0xFE;
+            cpu.p = PN_MASK;
+            mem[0x01FF] = 0;
+            let rom = vec![0x68];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x68,
+                    pc: 1,
+                    a: 0,
+                    s: 0xFF,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn pla_neg() {
+            let (mut cpu, mut mem) = setup();
+            cpu.s = 0xFE;
+            cpu.p = PZ_MASK;
+            mem[0x01FF] = 200;
+            let rom = vec![0x68];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x68,
+                    pc: 1,
+                    a: 200,
+                    s: 0xFF,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn plp() {
+            let (mut cpu, mut mem) = setup();
+            cpu.s = 0xFE;
+            cpu.p = 63;
+            mem[0x01FF] = 42;
+            let rom = vec![0x28];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x28,
+                    pc: 1,
+                    s: 0xFF,
+                    p: 42,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn plx_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.x = 42;
+            cpu.s = 0xFE;
+            cpu.p = PN_MASK;
+            mem[0x01FF] = 0;
+            let rom = vec![0xFA];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xFA,
+                    pc: 1,
+                    x: 0,
+                    s: 0xFF,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn plx_neg() {
+            let (mut cpu, mut mem) = setup();
+            cpu.s = 0xFE;
+            cpu.p = PZ_MASK;
+            mem[0x01FF] = 200;
+            let rom = vec![0xFA];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xFA,
+                    pc: 1,
+                    x: 200,
+                    s: 0xFF,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn ply_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.y = 42;
+            cpu.s = 0xFE;
+            cpu.p = PN_MASK;
+            mem[0x01FF] = 0;
+            let rom = vec![0x7A];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x7A,
+                    pc: 1,
+                    y: 0,
+                    s: 0xFF,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn ply_neg() {
+            let (mut cpu, mut mem) = setup();
+            cpu.s = 0xFE;
+            cpu.p = PZ_MASK;
+            mem[0x01FF] = 200;
+            let rom = vec![0x7A];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x7A,
+                    pc: 1,
+                    y: 200,
+                    s: 0xFF,
                     p: PN_MASK,
                     ..Cpu::new()
                 }
