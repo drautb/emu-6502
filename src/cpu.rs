@@ -780,7 +780,7 @@ impl Cpu {
                 self.update_pc(address_mode);
             }
 
-            Instruction::NOP(_) => {
+            Instruction::NOP(_) | Instruction::STP(_) => {
                 self.incr_pc();
             }
 
@@ -3300,21 +3300,42 @@ mod tests {
         }
     }
 
-    #[test]
-    fn nop() {
-        let (mut cpu, mut mem) = setup();
-        let rom = vec![0xEA];
+    mod nop_tests {
+        use super::*;
 
-        cpu.step(&rom, &mut mem);
+        #[test]
+        fn nop() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xEA];
 
-        assert_eq!(
-            cpu,
-            Cpu {
-                ir: 0xEA,
-                pc: 1,
-                ..Cpu::new()
-            }
-        );
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xEA,
+                    pc: 1,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn stp() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xDB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xDB,
+                    pc: 1,
+                    ..Cpu::new()
+                }
+            );
+        }
     }
 
     mod ora_tests {
