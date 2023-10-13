@@ -858,6 +858,12 @@ impl Cpu {
                 self.update_pc(address_mode);
             }
 
+            Instruction::RTS(_) => {
+                let pcl: u16 = self.pop_stack(mem) as u16;
+                let pch: u16 = self.pop_stack(mem) as u16;
+                self.pc = ((pch << 8) | pcl) as usize;
+            }
+
             Instruction::STA(_, AddressMode::ABS) => {
                 let addr = self.two_byte_operand(rom);
                 mem[addr as usize] = self.a;
@@ -2993,6 +2999,27 @@ mod tests {
             // 0x012E = 302nd byte - end of JSR instruction
             assert_eq!(mem[0x01FF], 0x01);
             assert_eq!(mem[0x01FE], 0x2E);
+        }
+
+        #[test]
+        fn rts() {
+            let (mut cpu, mut mem) = setup();
+            cpu.s = 0xFD;
+            mem[0x01FF] = 0x01;
+            mem[0x01FE] = 0x2E;
+            let rom = vec![0x60];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x60,
+                    pc: 0x012E,
+                    s: 0xFF,
+                    ..Cpu::new()
+                }
+            );
         }
     }
 
