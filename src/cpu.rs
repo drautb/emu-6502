@@ -754,9 +754,9 @@ impl Cpu {
                 self.pc = self.two_byte_operand(rom) as usize;
             }
 
-            Instruction::LDA(_, AddressMode::IMMEDIATE) => {
-                self.a = self.second_byte_operand(rom);
-                self.update_pc(AddressMode::IMMEDIATE);
+            Instruction::LDA(_, address_mode) => {
+                self.a = self.resolve_operand(&address_mode, rom, mem);
+                self.update_pc(address_mode);
             }
 
             Instruction::NOP(_) => {
@@ -2882,6 +2882,25 @@ mod tests {
                     ir: 0xA9,
                     a: 0xED,
                     pc: 2,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn lda_abs() {
+            let (mut cpu, mut mem) = setup();
+            mem[0xABCD] = 0xED;
+            let rom = vec![0xAD, 0xCD, 0xAB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xAD,
+                    a: 0xED,
+                    pc: 3,
                     ..Cpu::new()
                 }
             );
