@@ -822,6 +822,24 @@ impl Cpu {
                 self.update_pc(AddressMode::ZP);
             }
 
+            Instruction::ROL(_, AddressMode::ACC) => {
+                let new_carry = self.a >> 7;
+                self.a = (self.a << 1) | self.p & PC_MASK;
+                self.p = (self.p & !PC_MASK) | (new_carry & PC_MASK);
+                self.update_status_nz(self.a);
+                self.update_pc(AddressMode::ACC);
+            }
+            Instruction::ROL(_, address_mode) => {
+                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let val = mem[resolved_addr];
+                let new_carry = val >> 7;
+                let new_val = (val << 1) | self.p & PC_MASK;
+                self.p = (self.p & !PC_MASK) | (new_carry & PC_MASK);
+                mem[resolved_addr] = new_val;
+                self.update_status_nz(new_val);
+                self.update_pc(address_mode);
+            }
+
             Instruction::STA(_, AddressMode::ABS) => {
                 let addr = self.two_byte_operand(rom);
                 mem[addr as usize] = self.a;
@@ -3574,6 +3592,94 @@ mod tests {
                     }
                 )
             }
+        }
+    }
+
+    mod rotate_tests {
+        use super::*;
+
+        #[test]
+        fn rol_acc_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should be cleared
+            cpu.a = 0b1000_0000;
+            let rom = vec![0x2A];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x2A,
+                    pc: 1,
+                    a: 0,
+                    p: PC_MASK | PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn rol_acc_neg() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK | PC_MASK; // Should be cleared
+            cpu.a = 0b0100_0000;
+            let rom = vec![0x2A];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x2A,
+                    pc: 1,
+                    a: 0b1000_0001,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn rol_abs_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should be cleared
+            mem[0xABCD] = 0b1000_0000;
+            let rom = vec![0x2E, 0xCD, 0xAB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0xABCD], 0);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x2E,
+                    pc: 3,
+                    p: PC_MASK | PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn rol_abs_neg() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK | PC_MASK; // Should be cleared
+            mem[0xABCD] = 0b0100_0000;
+            let rom = vec![0x2E, 0xCD, 0xAB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0xABCD], 0b1000_0001);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x2E,
+                    pc: 3,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
         }
     }
 
