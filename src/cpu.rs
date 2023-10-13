@@ -707,11 +707,7 @@ impl Cpu {
                 self.cmp_register(rom, mem, address_mode, self.y);
             }
 
-            Instruction::DEC(_, AddressMode::ACC) => {
-                self.a = dec_wrap(self.a);
-                self.update_status_nz(self.a);
-                self.incr_pc();
-            }
+            Instruction::DEC(_, AddressMode::ACC) => self.a = self.dec_register(self.a),
             Instruction::DEC(_, address_mode) => {
                 let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
                 let val = mem[resolved_addr];
@@ -720,18 +716,11 @@ impl Cpu {
                 self.update_status_nz(result);
                 self.update_pc(address_mode);
             }
+            Instruction::DEX(_) => self.x = self.dec_register(self.x),
+            Instruction::DEY(_) => self.y = self.dec_register(self.y),
 
-            Instruction::INX(_) => {
-                self.x = inc_wrap(self.x);
-                self.update_status_nz(self.x);
-                self.incr_pc();
-            }
-
-            Instruction::INY(_) => {
-                self.y = inc_wrap(self.y);
-                self.update_status_nz(self.y);
-                self.incr_pc();
-            }
+            Instruction::INX(_) => self.x = self.inc_register(self.x),
+            Instruction::INY(_) => self.y = self.inc_register(self.y),
 
             Instruction::JMP(_, AddressMode::ABS) => self.pc = self.two_byte_operand(rom) as usize,
             Instruction::JMP(_, AddressMode::AI) => {
@@ -961,6 +950,20 @@ impl Cpu {
         self.update_status_nz(result);
         self.update_status_c(result, register);
         self.update_pc(address_mode);
+    }
+
+    fn inc_register(&mut self, register: u8) -> u8 {
+        let result = inc_wrap(register);
+        self.update_status_nz(result);
+        self.incr_pc();
+        result
+    }
+
+    fn dec_register(&mut self, register: u8) -> u8 {
+        let result = dec_wrap(register);
+        self.update_status_nz(result);
+        self.incr_pc();
+        result
     }
 }
 
@@ -2244,6 +2247,130 @@ mod tests {
                 }
             );
             assert_eq!(mem[0xABCD], 255);
+        }
+
+        #[test]
+        fn dex() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK | PN_MASK; // Should get cleared
+            cpu.x = 10;
+            let rom = vec![0xCA];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xCA,
+                    pc: 1,
+                    x: 9,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn dex_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should get cleared
+            cpu.x = 1;
+            let rom = vec![0xCA];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xCA,
+                    pc: 1,
+                    p: PZ_MASK,
+                    x: 0,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn dex_neg() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK; // Should get cleared
+            cpu.x = 0;
+            let rom = vec![0xCA];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xCA,
+                    pc: 1,
+                    p: PN_MASK,
+                    x: 255,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn dey() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK | PN_MASK; // Should get cleared
+            cpu.y = 10;
+            let rom = vec![0x88];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x88,
+                    pc: 1,
+                    y: 9,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn dey_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should get cleared
+            cpu.y = 1;
+            let rom = vec![0x88];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x88,
+                    pc: 1,
+                    p: PZ_MASK,
+                    y: 0,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn dey_neg() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK; // Should get cleared
+            cpu.y = 0;
+            let rom = vec![0x88];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x88,
+                    pc: 1,
+                    p: PN_MASK,
+                    y: 255,
+                    ..Cpu::new()
+                }
+            );
         }
     }
 
