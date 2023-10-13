@@ -784,6 +784,13 @@ impl Cpu {
                 self.incr_pc();
             }
 
+            Instruction::ORA(_, address_mode) => {
+                let operand = self.resolve_operand(&address_mode, rom, mem);
+                self.a |= operand;
+                self.update_status_nz(self.a);
+                self.update_pc(address_mode);
+            }
+
             Instruction::STA(_, AddressMode::ABS) => {
                 let addr = self.two_byte_operand(rom);
                 mem[addr as usize] = self.a;
@@ -3178,6 +3185,72 @@ mod tests {
                 ..Cpu::new()
             }
         );
+    }
+
+    mod ora_tests {
+        use super::*;
+
+        #[test]
+        fn ora_immediate() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 0b0000_0001;
+            cpu.p = PN_MASK | PZ_MASK; // Should be cleared
+            let rom = vec![0x09, 0b0011_1100];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x09,
+                    pc: 2,
+                    a: 0b0011_1101,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn ora_immediate_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 0;
+            cpu.p = PN_MASK; // Should be cleared
+            let rom = vec![0x09, 0];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x09,
+                    pc: 2,
+                    a: 0,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn ora_immediate_neg() {
+            let (mut cpu, mut mem) = setup();
+            cpu.a = 0b0000_0001;
+            cpu.p = PZ_MASK; // Should be cleared
+            let rom = vec![0x09, 0b1000_0000];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x09,
+                    pc: 2,
+                    a: 0b1000_0001,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
     }
 
     mod sta_tests {
