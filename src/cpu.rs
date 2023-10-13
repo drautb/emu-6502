@@ -884,10 +884,10 @@ impl Cpu {
                 self.update_pc(AddressMode::ZP);
             }
 
-            Instruction::STA(_, AddressMode::ABS) => {
-                let addr = self.two_byte_operand(rom);
-                mem[addr as usize] = self.a;
-                self.update_pc(AddressMode::ABS);
+            Instruction::STA(_, address_mode) => {
+                let addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                mem[addr] = self.a;
+                self.update_pc(address_mode);
             }
 
             instruction => {
@@ -3929,7 +3929,7 @@ mod tests {
         use super::*;
 
         #[test]
-        fn sta_a() {
+        fn sta_abs() {
             let (mut cpu, mut mem) = setup();
             let rom = vec![0x8D, 0x02, 0x60];
 
@@ -3947,6 +3947,33 @@ mod tests {
             );
 
             assert_eq!(mem[0x6002], 57);
+        }
+
+        #[test]
+        fn sta_zpii() {
+            let (mut cpu, mut mem) = setup();
+            cpu.x = 10;
+            cpu.a = 57;
+            mem[0x00CA] = 0x57;
+            mem[0x00CB] = 0x43;
+            mem[0x4357] = 0;
+
+            let rom = vec![0x81, 0xC0];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x81,
+                    a: 57,
+                    x: 10,
+                    pc: 2,
+                    ..Cpu::new()
+                }
+            );
+
+            assert_eq!(mem[0x4357], 57);
         }
     }
 
