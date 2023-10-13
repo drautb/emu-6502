@@ -726,6 +726,15 @@ impl Cpu {
                 self.update_pc(address_mode);
             }
 
+            Instruction::INC(_, AddressMode::ACC) => self.a = self.inc_register(self.a),
+            Instruction::INC(_, address_mode) => {
+                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let val = mem[resolved_addr];
+                let result = inc_wrap(val);
+                mem[resolved_addr] = result;
+                self.update_status_nz(result);
+                self.update_pc(address_mode);
+            }
             Instruction::INX(_) => self.x = self.inc_register(self.x),
             Instruction::INY(_) => self.y = self.inc_register(self.y),
 
@@ -2429,6 +2438,126 @@ mod tests {
 
     mod inc_tests {
         use super::*;
+
+        #[test]
+        fn inc_acc() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x1A];
+            cpu.a = 41;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x1A,
+                    pc: 1,
+                    a: 42,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn inc_acc_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x1A];
+            cpu.a = u8::MAX;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x1A,
+                    pc: 1,
+                    a: 0,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn inc_acc_reset_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x1A];
+            cpu.a = 5;
+            cpu.p = PZ_MASK;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x1A,
+                    pc: 1,
+                    a: 6,
+                    p: 0b00000000,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn inc_abs() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xEE, 0xCD, 0xAB];
+            mem[0xABCD] = 41;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0xABCD], 42);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xEE,
+                    pc: 3,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn inc_abs_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xEE, 0xCD, 0xAB];
+            mem[0xABCD] = u8::MAX;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0xABCD], 0);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xEE,
+                    pc: 3,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn inc_abs_reset_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xEE, 0xCD, 0xAB];
+            mem[0xABCD] = 5;
+            cpu.p = PZ_MASK;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0xABCD], 6);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xEE,
+                    pc: 3,
+                    p: 0b00000000,
+                    ..Cpu::new()
+                }
+            )
+        }
 
         #[test]
         fn inx() {
