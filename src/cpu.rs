@@ -719,6 +719,13 @@ impl Cpu {
             Instruction::DEX(_) => self.x = self.dec_register(self.x),
             Instruction::DEY(_) => self.y = self.dec_register(self.y),
 
+            Instruction::EOR(_, address_mode) => {
+                let operand = self.resolve_operand(&address_mode, rom, mem);
+                self.a ^= operand;
+                self.update_status_nz(self.a);
+                self.update_pc(address_mode);
+            }
+
             Instruction::INX(_) => self.x = self.inc_register(self.x),
             Instruction::INY(_) => self.y = self.inc_register(self.y),
 
@@ -2368,6 +2375,52 @@ mod tests {
                     pc: 1,
                     p: PN_MASK,
                     y: 255,
+                    ..Cpu::new()
+                }
+            );
+        }
+    }
+
+    mod eor_tests {
+        use super::*;
+
+        #[test]
+        fn eor_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should get cleared
+            cpu.a = 0b11111111;
+            let rom = vec![0x49, 0b11111111];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x49,
+                    pc: 2,
+                    a: 0,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn eor_neg() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK; // Should get cleared
+            cpu.a = 0b1001_1001;
+            let rom = vec![0x49, 0b0110_0110];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x49,
+                    pc: 2,
+                    a: 0b11111111,
+                    p: PN_MASK,
                     ..Cpu::new()
                 }
             );
