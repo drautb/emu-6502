@@ -759,6 +759,11 @@ impl Cpu {
                 self.update_status_nz(self.a);
                 self.update_pc(address_mode);
             }
+            Instruction::LDX(_, address_mode) => {
+                self.x = self.resolve_operand(&address_mode, rom, mem);
+                self.update_status_nz(self.x);
+                self.update_pc(address_mode);
+            }
 
             Instruction::NOP(_) => {
                 self.incr_pc();
@@ -788,6 +793,7 @@ impl Cpu {
             AddressMode::AIY => self.resolve_aiy(rom),
             AddressMode::ZP => self.resolve_zp(rom),
             AddressMode::ZPIX => self.resolve_zpix(rom),
+            AddressMode::ZPIY => self.resolve_zpiy(rom),
             AddressMode::ZPI => self.resolve_zpi(rom, mem),
             AddressMode::ZPII => self.resolve_zpii(rom, mem),
             AddressMode::ZPIIY => self.resolve_zpiiy(rom, mem),
@@ -868,6 +874,13 @@ impl Cpu {
         R: Index<usize, Output = u8>,
     {
         (self.second_byte_operand(rom) + self.x) as usize
+    }
+
+    fn resolve_zpiy<R>(&self, rom: &R) -> usize
+    where
+        R: Index<usize, Output = u8>,
+    {
+        (self.second_byte_operand(rom) + self.y) as usize
     }
 
     fn resolve_zpi<R, M>(&self, rom: &R, mem: &M) -> usize
@@ -2867,7 +2880,7 @@ mod tests {
         }
     }
 
-    mod lda_tests {
+    mod ld_tests {
         use super::*;
 
         #[test]
@@ -2906,6 +2919,69 @@ mod tests {
                     a: 0,
                     pc: 3,
                     p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn ldx_immediate() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK; // Should be cleared
+            let rom = vec![0xA2, 0xED];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xA2,
+                    x: 0xED,
+                    pc: 2,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn ldx_abs() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should be cleared
+            mem[0xABCD] = 0;
+            let rom = vec![0xAE, 0xCD, 0xAB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xAE,
+                    x: 0,
+                    pc: 3,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn ldx_zpiy() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should be cleared
+            cpu.y = 10;
+            mem[0x00CA] = 42;
+            let rom = vec![0xB6, 0xC0];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xB6,
+                    pc: 2,
+                    x: 42,
+                    y: 10,
                     ..Cpu::new()
                 }
             );
