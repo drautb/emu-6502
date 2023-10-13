@@ -774,7 +774,7 @@ impl Cpu {
                 self.update_pc(address_mode);
             }
 
-            Instruction::NOP(_) | Instruction::STP(_) => {
+            Instruction::NOP(_) | Instruction::STP(_) | Instruction::WAI(_) => {
                 self.incr_pc();
             }
 
@@ -3364,6 +3364,23 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0xDB,
+                    pc: 1,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn wai() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xCB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xCB,
                     pc: 1,
                     ..Cpu::new()
                 }
