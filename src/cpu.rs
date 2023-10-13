@@ -756,6 +756,7 @@ impl Cpu {
 
             Instruction::LDA(_, address_mode) => {
                 self.a = self.resolve_operand(&address_mode, rom, mem);
+                self.update_status_nz(self.a);
                 self.update_pc(address_mode);
             }
 
@@ -2872,6 +2873,7 @@ mod tests {
         #[test]
         fn lda_immediate() {
             let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK; // Should be cleared
             let rom = vec![0xA9, 0xED];
 
             cpu.step(&rom, &mut mem);
@@ -2882,6 +2884,7 @@ mod tests {
                     ir: 0xA9,
                     a: 0xED,
                     pc: 2,
+                    p: PN_MASK,
                     ..Cpu::new()
                 }
             );
@@ -2890,7 +2893,8 @@ mod tests {
         #[test]
         fn lda_abs() {
             let (mut cpu, mut mem) = setup();
-            mem[0xABCD] = 0xED;
+            cpu.p = PN_MASK; // Should be cleared
+            mem[0xABCD] = 0;
             let rom = vec![0xAD, 0xCD, 0xAB];
 
             cpu.step(&rom, &mut mem);
@@ -2899,8 +2903,9 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0xAD,
-                    a: 0xED,
+                    a: 0,
                     pc: 3,
+                    p: PZ_MASK,
                     ..Cpu::new()
                 }
             );
