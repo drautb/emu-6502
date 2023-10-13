@@ -883,6 +883,36 @@ impl Cpu {
             Instruction::STY(_, mode) => self.store_register(rom, mem, mode, self.y),
             Instruction::STZ(_, mode) => self.store_register(rom, mem, mode, 0),
 
+            Instruction::TAX(_) => {
+                self.x = self.a;
+                self.update_status_nz(self.x);
+                self.incr_pc();
+            }
+            Instruction::TAY(_) => {
+                self.y = self.a;
+                self.update_status_nz(self.y);
+                self.incr_pc();
+            }
+            Instruction::TSX(_) => {
+                self.x = self.s;
+                self.update_status_nz(self.x);
+                self.incr_pc();
+            }
+            Instruction::TXA(_) => {
+                self.a = self.x;
+                self.update_status_nz(self.a);
+                self.incr_pc();
+            }
+            Instruction::TXS(_) => {
+                self.s = self.x;
+                self.incr_pc();
+            }
+            Instruction::TYA(_) => {
+                self.a = self.y;
+                self.update_status_nz(self.a);
+                self.incr_pc();
+            }
+
             instruction => {
                 println!("Not implemented: {:?}", instruction);
                 todo!();
@@ -4062,6 +4092,261 @@ mod tests {
             );
 
             assert_eq!(mem[0xABC5], 0);
+        }
+    }
+
+    mod transfer_tests {
+        use super::*;
+
+        #[test]
+        fn tax_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xAA];
+
+            cpu.a = 0;
+            cpu.p = PN_MASK;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xAA,
+                    a: 0,
+                    x: 0,
+                    pc: 1,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn tax_neg() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xAA];
+
+            cpu.a = 200;
+            cpu.p = PZ_MASK;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xAA,
+                    a: 200,
+                    x: 200,
+                    pc: 1,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn tay_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xA8];
+
+            cpu.a = 0;
+            cpu.p = PN_MASK;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xA8,
+                    a: 0,
+                    y: 0,
+                    pc: 1,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn tay_neg() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xA8];
+
+            cpu.a = 200;
+            cpu.p = PZ_MASK;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xA8,
+                    a: 200,
+                    y: 200,
+                    pc: 1,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn tsx_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xBA];
+
+            cpu.s = 0;
+            cpu.p = PN_MASK;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xBA,
+                    pc: 1,
+                    p: PZ_MASK,
+                    s: 0,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn tsx_neg() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0xBA];
+
+            cpu.s = 200;
+            cpu.p = PZ_MASK;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xBA,
+                    s: 200,
+                    x: 200,
+                    pc: 1,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn txa_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x8A];
+
+            cpu.p = PN_MASK;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x8A,
+                    pc: 1,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn txa_neg() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x8A];
+
+            cpu.x = 200;
+            cpu.p = PZ_MASK;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x8A,
+                    a: 200,
+                    x: 200,
+                    pc: 1,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn txs_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x9A];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x9A,
+                    pc: 1,
+                    s: 0,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn txs_neg() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x9A];
+
+            cpu.x = 200;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x9A,
+                    s: 200,
+                    x: 200,
+                    pc: 1,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn tya_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x98];
+
+            cpu.p = PN_MASK;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x98,
+                    pc: 1,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn tya_neg() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x98];
+
+            cpu.y = 200;
+            cpu.p = PZ_MASK;
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x98,
+                    a: 200,
+                    y: 200,
+                    pc: 1,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
         }
     }
 
