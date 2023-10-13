@@ -755,14 +755,13 @@ impl Cpu {
             }
 
             Instruction::LDA(_, address_mode) => {
-                self.a = self.resolve_operand(&address_mode, rom, mem);
-                self.update_status_nz(self.a);
-                self.update_pc(address_mode);
+                self.a = self.load_register(rom, mem, address_mode)
             }
             Instruction::LDX(_, address_mode) => {
-                self.x = self.resolve_operand(&address_mode, rom, mem);
-                self.update_status_nz(self.x);
-                self.update_pc(address_mode);
+                self.x = self.load_register(rom, mem, address_mode)
+            }
+            Instruction::LDY(_, address_mode) => {
+                self.y = self.load_register(rom, mem, address_mode)
             }
 
             Instruction::NOP(_) => {
@@ -1000,6 +999,17 @@ impl Cpu {
         self.update_status_nz(result);
         self.incr_pc();
         result
+    }
+
+    fn load_register<R, M>(&mut self, rom: &R, mem: &M, address_mode: AddressMode) -> u8
+    where
+        R: Index<usize, Output = u8>,
+        M: IndexMut<usize, Output = u8>,
+    {
+        let value = self.resolve_operand(&address_mode, rom, mem);
+        self.update_status_nz(value);
+        self.update_pc(address_mode);
+        value
     }
 
     fn push_stack<M>(&mut self, mem: &mut M, val: u8)
@@ -2982,6 +2992,69 @@ mod tests {
                     pc: 2,
                     x: 42,
                     y: 10,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn ldy_immediate() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PZ_MASK; // Should be cleared
+            let rom = vec![0xA0, 0xED];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xA0,
+                    y: 0xED,
+                    pc: 2,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn ldy_abs() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should be cleared
+            mem[0xABCD] = 0;
+            let rom = vec![0xAC, 0xCD, 0xAB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xAC,
+                    y: 0,
+                    pc: 3,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn ldy_zpix() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should be cleared
+            cpu.x = 10;
+            mem[0x00CA] = 42;
+            let rom = vec![0xB4, 0xC0];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xB4,
+                    pc: 2,
+                    x: 10,
+                    y: 42,
                     ..Cpu::new()
                 }
             );
