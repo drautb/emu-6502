@@ -747,6 +747,12 @@ impl Cpu {
                 let new_pc_addr: usize = (self.two_byte_operand(rom) + self.x as u16) as usize;
                 self.pc = self.deref_mem(mem, new_pc_addr) as usize;
             }
+            Instruction::JSR(_) => {
+                let return_address = self.pc + 2;
+                self.push_stack(mem, (return_address >> 8) as u8);
+                self.push_stack(mem, return_address as u8);
+                self.pc = self.two_byte_operand(rom) as usize;
+            }
 
             Instruction::LDA(_, AddressMode::IMMEDIATE) => {
                 self.a = self.second_byte_operand(rom);
@@ -980,6 +986,14 @@ impl Cpu {
         self.update_status_nz(result);
         self.incr_pc();
         result
+    }
+
+    fn push_stack<M>(&mut self, mem: &mut M, val: u8)
+    where
+        M: IndexMut<usize, Output = u8>,
+    {
+        mem[(self.s as u16 + 0x100) as usize] = val;
+        self.s -= 1;
     }
 }
 
@@ -2821,6 +2835,34 @@ mod tests {
                     ..Cpu::new()
                 }
             );
+        }
+
+        #[test]
+        fn jsr() {
+            let (mut cpu, mut mem) = setup();
+            cpu.s = 0xFF;
+
+            // Pad rom with no-ops to get the PC to an interesting location
+            let mut rom = vec![0xEA; 300];
+            rom.extend(vec![0x20, 0xCD, 0xAB]);
+
+            for _ in 0..301 {
+                cpu.step(&rom, &mut mem);
+            }
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x20,
+                    pc: 0xABCD,
+                    s: 0xFD,
+                    ..Cpu::new()
+                }
+            );
+
+            // 0x012E = 302nd byte - end of JSR instruction
+            assert_eq!(mem[0x01FF], 0x01);
+            assert_eq!(mem[0x01FE], 0x2E);
         }
     }
 
