@@ -893,6 +893,20 @@ impl Cpu {
                 self.update_status_nz(self.y);
                 self.incr_pc();
             }
+
+            Instruction::TRB(_, address_mode) => {
+                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                mem[resolved_addr] &= !self.a;
+                self.update_status_z(mem[resolved_addr]);
+                self.update_pc(address_mode);
+            }
+            Instruction::TSB(_, address_mode) => {
+                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                mem[resolved_addr] |= self.a;
+                self.update_status_z(mem[resolved_addr]);
+                self.update_pc(address_mode);
+            }
+
             Instruction::TSX(_) => {
                 self.x = self.s;
                 self.update_status_nz(self.x);
@@ -4361,6 +4375,96 @@ mod tests {
                     y: 200,
                     pc: 1,
                     p: PN_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+    }
+
+    mod test_and_set_or_reset_tests {
+        use super::*;
+
+        #[test]
+        fn trb() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x1C, 0xCD, 0xAB];
+            mem[0xABCD] = 0b0011_1100;
+            cpu.a = 0b0000_1111;
+            cpu.p = PZ_MASK;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0xABCD], 0b0011_0000);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x1C,
+                    pc: 3,
+                    a: 0b0000_1111,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn trb_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x1C, 0xCD, 0xAB];
+            mem[0xABCD] = 0b0000_1100;
+            cpu.a = 0b0000_1111;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0xABCD], 0);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x1C,
+                    pc: 3,
+                    a: 0b0000_1111,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn tsb() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x0C, 0xCD, 0xAB];
+            mem[0xABCD] = 0b0011_1100;
+            cpu.a = 0b0000_1111;
+            cpu.p = PZ_MASK;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0xABCD], 0b0011_1111);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x0C,
+                    pc: 3,
+                    a: 0b0000_1111,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn tsb_zero() {
+            let (mut cpu, mut mem) = setup();
+            let rom = vec![0x0C, 0xCD, 0xAB];
+            cpu.p = PZ_MASK;
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0xABCD], 0);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x0C,
+                    pc: 3,
+                    p: PZ_MASK,
                     ..Cpu::new()
                 }
             );
