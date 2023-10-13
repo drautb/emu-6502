@@ -764,6 +764,22 @@ impl Cpu {
                 self.y = self.load_register(rom, mem, address_mode)
             }
 
+            Instruction::LSR(_, AddressMode::ACC) => {
+                self.p = (self.p & !PC_MASK) | (self.a & PC_MASK);
+                self.a >>= 1;
+                self.update_status_nz(self.a);
+                self.update_pc(AddressMode::ACC);
+            }
+            Instruction::LSR(_, address_mode) => {
+                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let val = mem[resolved_addr];
+                self.p = (self.p & !PC_MASK) | (val & PC_MASK);
+                let result = val >> 1;
+                mem[resolved_addr] = result;
+                self.update_status_nz(result);
+                self.update_pc(address_mode);
+            }
+
             Instruction::NOP(_) => {
                 self.incr_pc();
             }
@@ -3055,6 +3071,92 @@ mod tests {
                     pc: 2,
                     x: 10,
                     y: 42,
+                    ..Cpu::new()
+                }
+            );
+        }
+    }
+
+    mod lsr_tests {
+        use super::*;
+
+        #[test]
+        fn lsr_acc() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK | PZ_MASK | PC_MASK; // Should be cleared
+            cpu.a = 0b1111_0000;
+            let rom = vec![0x4A];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x4A,
+                    pc: 1,
+                    a: 0b0111_1000,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn lsr_acc_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should be cleared
+            cpu.a = 0b0000_0001;
+            let rom = vec![0x4A];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x4A,
+                    pc: 1,
+                    a: 0,
+                    p: PZ_MASK | PC_MASK,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn lsr_abs() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK | PZ_MASK | PC_MASK; // Should be cleared
+            mem[0xABCD] = 0b1111_0000;
+            let rom = vec![0x4E, 0xCD, 0xAB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0xABCD], 0b0111_1000);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x4E,
+                    pc: 3,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn lsr_abs_zero() {
+            let (mut cpu, mut mem) = setup();
+            cpu.p = PN_MASK; // Should be cleared
+            mem[0xABCD] = 0b0000_0001;
+            let rom = vec![0x4E, 0xCD, 0xAB];
+
+            cpu.step(&rom, &mut mem);
+
+            assert_eq!(mem[0xABCD], 0);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x4E,
+                    pc: 3,
+                    p: PZ_MASK | PC_MASK,
                     ..Cpu::new()
                 }
             );
