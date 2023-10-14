@@ -4471,6 +4471,20 @@ mod tests {
         }
     }
 
+    mod interrupt_tests {
+        use super::*;
+
+        #[test]
+        fn brk() {
+
+        }
+
+        #[test]
+        fn rti() {
+
+        }
+    }
+
     mod cpu_status_tests {
         use super::*;
 
