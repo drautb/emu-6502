@@ -407,7 +407,7 @@ fn load_instruction(opcode: u8) -> Instruction {
 
 const PN_MASK: u8 = 0b10000000;
 const PV_MASK: u8 = 0b01000000;
-// const PB_MASK: u8 = 0b00010000;
+const PB_MASK: u8 = 0b00010000;
 const PD_MASK: u8 = 0b00001000;
 const PI_MASK: u8 = 0b00000100;
 const PZ_MASK: u8 = 0b00000010;
@@ -435,7 +435,7 @@ fn sub_wrap(n1: u8, n2: u8) -> u8 {
     (Wrapping(n1) - Wrapping(n2)).0
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Cpu {
     ir: u8, // instruction register
     a: u8,  // accumulator
@@ -514,24 +514,6 @@ impl Default for Cpu {
 }
 
 impl Cpu {
-    fn instruction_length(address_mode: AddressMode) -> usize {
-        match address_mode {
-            AddressMode::ACC => 1,
-            AddressMode::IMMEDIATE => 2,
-            AddressMode::ABS => 3,
-            AddressMode::AIX => 3,
-            AddressMode::AIY => 3,
-            AddressMode::AI => 3,
-            AddressMode::AII => 3,
-            AddressMode::ZP => 2,
-            AddressMode::ZPIX => 2,
-            AddressMode::ZPIY => 2,
-            AddressMode::ZPI => 2,
-            AddressMode::ZPII => 2,
-            AddressMode::ZPIIY => 2,
-        }
-    }
-
     pub fn new() -> Self {
         Cpu {
             ir: 0,
@@ -963,6 +945,62 @@ impl Cpu {
         }
     }
 
+    pub fn program_counter(&self) -> usize {
+        self.pc
+    }
+
+    pub fn instruction_register(&self) -> u8 {
+        self.ir
+    }
+
+    pub fn accumulator(&self) -> u8 {
+        self.a
+    }
+
+    pub fn x_register(&self) -> u8 {
+        self.x
+    }
+
+    pub fn y_register(&self) -> u8 {
+        self.y
+    }
+
+    pub fn status(&self) -> u8 {
+        self.p
+    }
+
+    pub fn stack_pointer(&self) -> u8 {
+        self.s
+    }
+
+    pub fn get_status_neg(&self) -> bool {
+        (PN_MASK & self.p) != 0
+    }
+
+    pub fn get_status_overflow(&self) -> bool {
+        (PV_MASK & self.p) != 0
+    }
+
+    pub fn get_status_brk(&self) -> bool {
+        (PB_MASK & self.p) != 0
+    }
+
+    pub fn get_status_dec(&self) -> bool {
+        (PD_MASK & self.p) != 0
+    }
+
+    pub fn get_status_interrupt_disable(&self) -> bool {
+        (PI_MASK & self.p) != 0
+    }
+
+    pub fn get_status_zero(&self) -> bool {
+        (PZ_MASK & self.p) != 0
+    }
+
+    pub fn get_status_carry(&self) -> bool {
+        (PC_MASK & self.p) != 0
+    }
+
     fn resolve_operand_addr<M>(&mut self, address_mode: &AddressMode, mem: &M) -> usize
     where
         M: IndexMut<usize, Output = u8>,
@@ -1218,6 +1256,24 @@ impl Cpu {
     {
         self.s += 1;
         mem[(self.s as u16 + 0x100) as usize]
+    }
+
+    fn instruction_length(address_mode: AddressMode) -> usize {
+        match address_mode {
+            AddressMode::ACC => 1,
+            AddressMode::IMMEDIATE => 2,
+            AddressMode::ABS => 3,
+            AddressMode::AIX => 3,
+            AddressMode::AIY => 3,
+            AddressMode::AI => 3,
+            AddressMode::AII => 3,
+            AddressMode::ZP => 2,
+            AddressMode::ZPIX => 2,
+            AddressMode::ZPIY => 2,
+            AddressMode::ZPI => 2,
+            AddressMode::ZPII => 2,
+            AddressMode::ZPIIY => 2,
+        }
     }
 }
 
