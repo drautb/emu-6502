@@ -416,7 +416,7 @@ const PC_MASK: u8 = 0b00000001;
 const PNV_MASK: u8 = PN_MASK | PV_MASK;
 
 // const NMI_VECTOR: usize = 0xFFFA;
-// const RESET_VECTOR: usize = 0xFFFC;
+const RESET_VECTOR: usize = 0xFFFC;
 const IRQ_VECTOR: usize = 0xFFFE;
 
 fn inc_wrap(n: u8) -> u8 {
@@ -544,13 +544,16 @@ impl Cpu {
         }
     }
 
-    pub fn reset(&mut self) {
+    pub fn reset<M>(&mut self, mem: &M)
+    where
+        M: IndexMut<usize, Output = u8>,
+    {
         self.ir = 0;
         self.a = 0;
         self.x = 0;
         self.y = 0;
         self.p = 0;
-        self.pc = 0;
+        self.pc = self.deref_mem(mem, RESET_VECTOR) as usize;
         self.s = 0xFF;
     }
 
@@ -1246,8 +1249,9 @@ mod tests {
             pc: 6,
             s: 7,
         };
+        let mem = [0; 65_536];
 
-        cpu.reset();
+        cpu.reset(&mem);
 
         assert_eq!(cpu, Cpu::new());
     }
