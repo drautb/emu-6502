@@ -415,6 +415,10 @@ const PC_MASK: u8 = 0b00000001;
 
 const PNV_MASK: u8 = PN_MASK | PV_MASK;
 
+// const NMI_VECTOR: usize = 0xFFFA;
+// const RESET_VECTOR: usize = 0xFFFC;
+const IRQ_VECTOR: usize = 0xFFFE;
+
 fn inc_wrap(n: u8) -> u8 {
     add_wrap(n, 1)
 }
@@ -677,9 +681,8 @@ impl Cpu {
                 self.push_stack(mem, self.p);
                 self.set_status(PI_MASK);
                 self.clear_status(PD_MASK);
-                // TODO: Need to study interrupts more, looks like there are multiple ISRs to provide.
-                // http://6502.org/tutorials/interrupts.html
-                self.pc = 0xFFFA;
+                // BRK uses the vector at $FFFE-$FFFF - http://6502.org/tutorials/interrupts.html#2.2
+                self.pc = self.deref_mem(mem, IRQ_VECTOR) as usize;
             }
 
             Instruction::BVC(_) => {
@@ -4502,6 +4505,8 @@ mod tests {
         fn brk() {
             let (mut cpu, mut mem) = setup();
             cpu.p = PZ_MASK | PN_MASK | PD_MASK;
+            mem[0xFFFE] = 0xCD;
+            mem[0xFFFF] = 0xAB;
 
             // Pad rom with no-ops to get the PC to an interesting location
             let mut rom = vec![0xEA; 300];
@@ -4515,7 +4520,7 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0x00,
-                    pc: 0xFFFA,
+                    pc: 0xABCD,
                     s: 0xFC,
                     p: PZ_MASK | PN_MASK | PI_MASK,
                     ..Cpu::new()
