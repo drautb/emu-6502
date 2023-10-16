@@ -675,6 +675,7 @@ impl Cpu {
                 self.push_stack(mem, (return_address >> 8) as u8);
                 self.push_stack(mem, return_address as u8);
                 self.push_stack(mem, self.p);
+                self.set_status(PI_MASK);
                 // TODO: Need to study interrupts more, looks like there are multiple ISRs to provide.
                 // http://6502.org/tutorials/interrupts.html
                 self.pc = 0xFFFA;
@@ -4499,7 +4500,7 @@ mod tests {
         #[test]
         fn brk() {
             let (mut cpu, mut mem) = setup();
-            cpu.p = 42;
+            cpu.p = PZ_MASK | PN_MASK;
 
             // Pad rom with no-ops to get the PC to an interesting location
             let mut rom = vec![0xEA; 300];
@@ -4515,7 +4516,7 @@ mod tests {
                     ir: 0x00,
                     pc: 0xFFFA,
                     s: 0xFC,
-                    p: 42,
+                    p: PZ_MASK | PN_MASK | PI_MASK,
                     ..Cpu::new()
                 }
             );
@@ -4523,7 +4524,7 @@ mod tests {
             // 0x012D = 301st byte - end of BRK instruction
             assert_eq!(mem[0x01FF], 0x01);
             assert_eq!(mem[0x01FE], 0x2D);
-            assert_eq!(mem[0x01FD], 42);
+            assert_eq!(mem[0x01FD], PZ_MASK | PN_MASK);
         }
 
         #[test]
@@ -4541,10 +4542,11 @@ mod tests {
         fn rti() {
             let (mut cpu, mut mem) = setup();
             let rom = vec![0x40];
+            cpu.p = PZ_MASK | PN_MASK | PI_MASK;
             cpu.s = 0xFC;
             mem[0x01FF] = 0x01;
             mem[0x01FE] = 0x2D;
-            mem[0x01FD] = 42;
+            mem[0x01FD] = PZ_MASK | PN_MASK;
 
             cpu.step(&rom, &mut mem);
 
@@ -4554,7 +4556,7 @@ mod tests {
                     ir: 0x40,
                     pc: 0x012D,
                     s: 0xFF,
-                    p: 42,
+                    p: PZ_MASK | PN_MASK,
                     ..Cpu::new()
                 }
             );
