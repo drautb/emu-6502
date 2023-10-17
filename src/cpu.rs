@@ -557,18 +557,17 @@ impl Cpu {
         self.s = 0xFF;
     }
 
-    pub fn step<M, R>(&mut self, rom: &R, mem: &mut M)
+    pub fn step<M>(&mut self, mem: &mut M)
     where
-        R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
-        let opcode = rom[self.pc];
+        let opcode = mem[self.pc];
         let instruction = load_instruction(opcode);
         self.ir = opcode;
         match instruction {
             Instruction::ADC(_, address_mode) => {
                 let n1 = self.a;
-                let n2 = self.resolve_operand(&address_mode, rom, mem);
+                let n2 = self.resolve_operand(&address_mode, mem);
                 self.a = add_wrap(n1, n2);
                 self.update_status_nz(self.a);
                 self.update_status_c(self.a, n1);
@@ -577,7 +576,7 @@ impl Cpu {
             }
 
             Instruction::AND(_, address_mode) => {
-                self.a &= self.resolve_operand(&address_mode, rom, mem);
+                self.a &= self.resolve_operand(&address_mode, mem);
                 self.update_status_nz(self.a);
                 self.update_pc(address_mode);
             }
@@ -589,7 +588,7 @@ impl Cpu {
                 self.update_pc(AddressMode::ACC);
             }
             Instruction::ASL(_, address_mode) => {
-                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
                 let val = mem[resolved_addr];
                 self.p = (self.p & !PC_MASK) | (val >> 7);
                 let result = val << 1;
@@ -599,8 +598,8 @@ impl Cpu {
             }
 
             Instruction::BBR(_, bit) => {
-                let test = mem[self.resolve_zp(rom)];
-                let offset = self.third_byte_operand(rom);
+                let test = mem[self.resolve_zp(mem)];
+                let offset = self.third_byte_operand(mem);
                 if test & (1 << bit) == 0 {
                     self.pc += offset as usize;
                 } else {
@@ -608,8 +607,8 @@ impl Cpu {
                 }
             }
             Instruction::BBS(_, bit) => {
-                let test = mem[self.resolve_zp(rom)];
-                let offset = self.third_byte_operand(rom);
+                let test = mem[self.resolve_zp(mem)];
+                let offset = self.third_byte_operand(mem);
                 if test & (1 << bit) > 0 {
                     self.pc += offset as usize;
                 } else {
@@ -619,14 +618,14 @@ impl Cpu {
 
             Instruction::BCC(_) => {
                 self.pc += if self.p & PC_MASK == 0 {
-                    self.second_byte_operand(rom) as usize
+                    self.second_byte_operand(mem) as usize
                 } else {
                     2
                 }
             }
             Instruction::BCS(_) => {
                 self.pc += if self.p & PC_MASK > 0 {
-                    self.second_byte_operand(rom) as usize
+                    self.second_byte_operand(mem) as usize
                 } else {
                     2
                 }
@@ -634,14 +633,14 @@ impl Cpu {
 
             Instruction::BEQ(_) => {
                 self.pc += if self.p & PZ_MASK > 0 {
-                    self.second_byte_operand(rom) as usize
+                    self.second_byte_operand(mem) as usize
                 } else {
                     2
                 }
             }
 
             Instruction::BIT(_, address_mode) => {
-                let operand = self.resolve_operand(&address_mode, rom, mem);
+                let operand = self.resolve_operand(&address_mode, mem);
                 self.p = (self.p & !PNV_MASK) | (operand & PNV_MASK); // Set N and V equal to operand bits 7 and 6 respectively
                 self.update_status_z(self.a & operand);
                 self.update_pc(address_mode)
@@ -649,28 +648,28 @@ impl Cpu {
 
             Instruction::BMI(_) => {
                 self.pc += if self.p & PN_MASK > 0 {
-                    self.second_byte_operand(rom) as usize
+                    self.second_byte_operand(mem) as usize
                 } else {
                     2
                 }
             }
             Instruction::BNE(_) => {
                 self.pc += if self.p & PZ_MASK == 0 {
-                    self.second_byte_operand(rom) as usize
+                    self.second_byte_operand(mem) as usize
                 } else {
                     2
                 }
             }
             Instruction::BPL(_) => {
                 self.pc += if self.p & PN_MASK == 0 {
-                    self.second_byte_operand(rom) as usize
+                    self.second_byte_operand(mem) as usize
                 } else {
                     2
                 }
             }
 
             Instruction::BRA(_) => {
-                self.pc += self.second_byte_operand(rom) as usize;
+                self.pc += self.second_byte_operand(mem) as usize;
             }
 
             Instruction::BRK(_) => {
@@ -690,14 +689,14 @@ impl Cpu {
 
             Instruction::BVC(_) => {
                 self.pc += if self.p & PV_MASK == 0 {
-                    self.second_byte_operand(rom) as usize
+                    self.second_byte_operand(mem) as usize
                 } else {
                     2
                 }
             }
             Instruction::BVS(_) => {
                 self.pc += if self.p & PV_MASK > 0 {
-                    self.second_byte_operand(rom) as usize
+                    self.second_byte_operand(mem) as usize
                 } else {
                     2
                 }
@@ -721,18 +720,18 @@ impl Cpu {
             }
 
             Instruction::CMP(_, address_mode) => {
-                self.cmp_register(rom, mem, address_mode, self.a);
+                self.cmp_register(mem, address_mode, self.a);
             }
             Instruction::CPX(_, address_mode) => {
-                self.cmp_register(rom, mem, address_mode, self.x);
+                self.cmp_register(mem, address_mode, self.x);
             }
             Instruction::CPY(_, address_mode) => {
-                self.cmp_register(rom, mem, address_mode, self.y);
+                self.cmp_register(mem, address_mode, self.y);
             }
 
             Instruction::DEC(_, AddressMode::ACC) => self.a = self.dec_register(self.a),
             Instruction::DEC(_, address_mode) => {
-                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
                 let val = mem[resolved_addr];
                 let result = dec_wrap(val);
                 mem[resolved_addr] = result;
@@ -743,7 +742,7 @@ impl Cpu {
             Instruction::DEY(_) => self.y = self.dec_register(self.y),
 
             Instruction::EOR(_, address_mode) => {
-                let operand = self.resolve_operand(&address_mode, rom, mem);
+                let operand = self.resolve_operand(&address_mode, mem);
                 self.a ^= operand;
                 self.update_status_nz(self.a);
                 self.update_pc(address_mode);
@@ -751,7 +750,7 @@ impl Cpu {
 
             Instruction::INC(_, AddressMode::ACC) => self.a = self.inc_register(self.a),
             Instruction::INC(_, address_mode) => {
-                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
                 let val = mem[resolved_addr];
                 let result = inc_wrap(val);
                 mem[resolved_addr] = result;
@@ -761,25 +760,25 @@ impl Cpu {
             Instruction::INX(_) => self.x = self.inc_register(self.x),
             Instruction::INY(_) => self.y = self.inc_register(self.y),
 
-            Instruction::JMP(_, AddressMode::ABS) => self.pc = self.two_byte_operand(rom) as usize,
+            Instruction::JMP(_, AddressMode::ABS) => self.pc = self.two_byte_operand(mem) as usize,
             Instruction::JMP(_, AddressMode::AI) => {
-                let new_pc_addr = self.two_byte_operand(rom) as usize;
+                let new_pc_addr = self.two_byte_operand(mem) as usize;
                 self.pc = self.deref_mem(mem, new_pc_addr) as usize;
             }
             Instruction::JMP(_, AddressMode::AII) => {
-                let new_pc_addr: usize = (self.two_byte_operand(rom) + self.x as u16) as usize;
+                let new_pc_addr: usize = (self.two_byte_operand(mem) + self.x as u16) as usize;
                 self.pc = self.deref_mem(mem, new_pc_addr) as usize;
             }
             Instruction::JSR(_) => {
                 let return_address = self.pc + 2;
                 self.push_stack(mem, (return_address >> 8) as u8);
                 self.push_stack(mem, return_address as u8);
-                self.pc = self.two_byte_operand(rom) as usize;
+                self.pc = self.two_byte_operand(mem) as usize;
             }
 
-            Instruction::LDA(_, mode) => self.a = self.load_register(rom, mem, mode),
-            Instruction::LDX(_, mode) => self.x = self.load_register(rom, mem, mode),
-            Instruction::LDY(_, mode) => self.y = self.load_register(rom, mem, mode),
+            Instruction::LDA(_, mode) => self.a = self.load_register(mem, mode),
+            Instruction::LDX(_, mode) => self.x = self.load_register(mem, mode),
+            Instruction::LDY(_, mode) => self.y = self.load_register(mem, mode),
 
             Instruction::LSR(_, AddressMode::ACC) => {
                 self.p = (self.p & !PC_MASK) | (self.a & PC_MASK);
@@ -788,7 +787,7 @@ impl Cpu {
                 self.update_pc(AddressMode::ACC);
             }
             Instruction::LSR(_, address_mode) => {
-                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
                 let val = mem[resolved_addr];
                 self.p = (self.p & !PC_MASK) | (val & PC_MASK);
                 let result = val >> 1;
@@ -802,7 +801,7 @@ impl Cpu {
             }
 
             Instruction::ORA(_, address_mode) => {
-                let operand = self.resolve_operand(&address_mode, rom, mem);
+                let operand = self.resolve_operand(&address_mode, mem);
                 self.a |= operand;
                 self.update_status_nz(self.a);
                 self.update_pc(address_mode);
@@ -834,7 +833,7 @@ impl Cpu {
 
             Instruction::RMB(_, bit) => {
                 let mask = 1 << bit;
-                let resolved_addr = self.resolve_operand_addr(&AddressMode::ZP, rom, mem);
+                let resolved_addr = self.resolve_operand_addr(&AddressMode::ZP, mem);
                 mem[resolved_addr] &= !mask;
                 self.update_pc(AddressMode::ZP);
             }
@@ -847,7 +846,7 @@ impl Cpu {
                 self.update_pc(AddressMode::ACC);
             }
             Instruction::ROL(_, address_mode) => {
-                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
                 let val = mem[resolved_addr];
                 let new_carry = val >> 7;
                 let new_val = (val << 1) | self.p & PC_MASK;
@@ -865,7 +864,7 @@ impl Cpu {
                 self.update_pc(AddressMode::ACC);
             }
             Instruction::ROR(_, address_mode) => {
-                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
                 let val = mem[resolved_addr];
                 let new_carry = val & PC_MASK;
                 let new_val = (val >> 1) | ((self.p & PC_MASK) << 7);
@@ -903,15 +902,15 @@ impl Cpu {
 
             Instruction::SMB(_, bit) => {
                 let mask = 1 << bit;
-                let resolved_addr = self.resolve_operand_addr(&AddressMode::ZP, rom, mem);
+                let resolved_addr = self.resolve_operand_addr(&AddressMode::ZP, mem);
                 mem[resolved_addr] |= mask;
                 self.update_pc(AddressMode::ZP);
             }
 
-            Instruction::STA(_, mode) => self.store_register(rom, mem, mode, self.a),
-            Instruction::STX(_, mode) => self.store_register(rom, mem, mode, self.x),
-            Instruction::STY(_, mode) => self.store_register(rom, mem, mode, self.y),
-            Instruction::STZ(_, mode) => self.store_register(rom, mem, mode, 0),
+            Instruction::STA(_, mode) => self.store_register(mem, mode, self.a),
+            Instruction::STX(_, mode) => self.store_register(mem, mode, self.x),
+            Instruction::STY(_, mode) => self.store_register(mem, mode, self.y),
+            Instruction::STZ(_, mode) => self.store_register(mem, mode, 0),
 
             Instruction::TAX(_) => {
                 self.x = self.a;
@@ -925,13 +924,13 @@ impl Cpu {
             }
 
             Instruction::TRB(_, address_mode) => {
-                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
                 mem[resolved_addr] &= !self.a;
                 self.update_status_z(mem[resolved_addr]);
                 self.update_pc(address_mode);
             }
             Instruction::TSB(_, address_mode) => {
-                let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+                let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
                 mem[resolved_addr] |= self.a;
                 self.update_status_z(mem[resolved_addr]);
                 self.update_pc(address_mode);
@@ -964,21 +963,20 @@ impl Cpu {
         }
     }
 
-    fn resolve_operand_addr<R, M>(&mut self, address_mode: &AddressMode, rom: &R, mem: &M) -> usize
+    fn resolve_operand_addr<M>(&mut self, address_mode: &AddressMode, mem: &M) -> usize
     where
-        R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
         match address_mode {
-            AddressMode::ABS => self.resolve_abs(rom),
-            AddressMode::AIX => self.resolve_aix(rom),
-            AddressMode::AIY => self.resolve_aiy(rom),
-            AddressMode::ZP => self.resolve_zp(rom),
-            AddressMode::ZPIX => self.resolve_zpix(rom),
-            AddressMode::ZPIY => self.resolve_zpiy(rom),
-            AddressMode::ZPI => self.resolve_zpi(rom, mem),
-            AddressMode::ZPII => self.resolve_zpii(rom, mem),
-            AddressMode::ZPIIY => self.resolve_zpiiy(rom, mem),
+            AddressMode::ABS => self.resolve_abs(mem),
+            AddressMode::AIX => self.resolve_aix(mem),
+            AddressMode::AIY => self.resolve_aiy(mem),
+            AddressMode::ZP => self.resolve_zp(mem),
+            AddressMode::ZPIX => self.resolve_zpix(mem),
+            AddressMode::ZPIY => self.resolve_zpiy(mem),
+            AddressMode::ZPI => self.resolve_zpi(mem),
+            AddressMode::ZPII => self.resolve_zpii(mem),
+            AddressMode::ZPIIY => self.resolve_zpiiy(mem),
             _ => {
                 println!(
                     "Unable to resolve operand address for mode {:?}",
@@ -989,109 +987,105 @@ impl Cpu {
         }
     }
 
-    fn resolve_operand<R, M>(&mut self, address_mode: &AddressMode, rom: &R, mem: &M) -> u8
+    fn resolve_operand<M>(&mut self, address_mode: &AddressMode, mem: &M) -> u8
     where
-        R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
         match address_mode {
-            AddressMode::IMMEDIATE => self.second_byte_operand(rom),
-            _ => mem[self.resolve_operand_addr(address_mode, rom, mem)],
+            AddressMode::IMMEDIATE => self.second_byte_operand(mem),
+            _ => mem[self.resolve_operand_addr(address_mode, mem)],
         }
     }
 
-    fn second_byte_operand<R>(&self, rom: &R) -> u8
+    fn second_byte_operand<M>(&self, mem: &M) -> u8
     where
-        R: Index<usize, Output = u8>,
+        M: Index<usize, Output = u8>,
     {
-        rom[self.pc + 1]
+        mem[self.pc + 1]
     }
 
-    fn third_byte_operand<R>(&self, rom: &R) -> u8
+    fn third_byte_operand<M>(&self, mem: &M) -> u8
     where
-        R: Index<usize, Output = u8>,
+        M: Index<usize, Output = u8>,
     {
-        rom[self.pc + 2]
+        mem[self.pc + 2]
     }
 
-    fn two_byte_operand<R>(&self, rom: &R) -> u16
+    fn two_byte_operand<M>(&self, mem: &M) -> u16
     where
-        R: Index<usize, Output = u8>,
+        M: Index<usize, Output = u8>,
     {
-        let op_l: u16 = rom[self.pc + 1].into();
-        let op_h: u16 = rom[self.pc + 2].into();
+        let op_l: u16 = mem[self.pc + 1].into();
+        let op_h: u16 = mem[self.pc + 2].into();
         (op_h << 8) | op_l
     }
 
-    fn resolve_abs<R>(&mut self, rom: &R) -> usize
+    fn resolve_abs<M>(&mut self, mem: &M) -> usize
     where
-        R: Index<usize, Output = u8>,
+        M: Index<usize, Output = u8>,
     {
-        self.two_byte_operand(rom) as usize
+        self.two_byte_operand(mem) as usize
     }
 
-    fn resolve_aix<R>(&self, rom: &R) -> usize
+    fn resolve_aix<M>(&self, mem: &M) -> usize
     where
-        R: Index<usize, Output = u8>,
+        M: Index<usize, Output = u8>,
     {
-        (self.two_byte_operand(rom) + self.x as u16) as usize
+        (self.two_byte_operand(mem) + self.x as u16) as usize
     }
 
-    fn resolve_aiy<R>(&self, rom: &R) -> usize
+    fn resolve_aiy<M>(&self, mem: &M) -> usize
     where
-        R: Index<usize, Output = u8>,
+        M: Index<usize, Output = u8>,
     {
-        (self.two_byte_operand(rom) + self.y as u16) as usize
+        (self.two_byte_operand(mem) + self.y as u16) as usize
     }
 
-    fn resolve_zp<R>(&self, rom: &R) -> usize
+    fn resolve_zp<M>(&self, mem: &M) -> usize
     where
-        R: Index<usize, Output = u8>,
+        M: Index<usize, Output = u8>,
     {
-        self.second_byte_operand(rom) as usize
+        self.second_byte_operand(mem) as usize
     }
 
-    fn resolve_zpix<R>(&self, rom: &R) -> usize
+    fn resolve_zpix<M>(&self, mem: &M) -> usize
     where
-        R: Index<usize, Output = u8>,
+        M: Index<usize, Output = u8>,
     {
-        (self.second_byte_operand(rom) + self.x) as usize
+        (self.second_byte_operand(mem) + self.x) as usize
     }
 
-    fn resolve_zpiy<R>(&self, rom: &R) -> usize
+    fn resolve_zpiy<M>(&self, mem: &M) -> usize
     where
-        R: Index<usize, Output = u8>,
+        M: Index<usize, Output = u8>,
     {
-        (self.second_byte_operand(rom) + self.y) as usize
+        (self.second_byte_operand(mem) + self.y) as usize
     }
 
-    fn resolve_zpi<R, M>(&self, rom: &R, mem: &M) -> usize
+    fn resolve_zpi<M>(&self, mem: &M) -> usize
     where
-        R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
-        let indirect_address = self.second_byte_operand(rom);
+        let indirect_address = self.second_byte_operand(mem);
         let operand_address: u16 = self.deref_mem(mem, indirect_address as usize);
         operand_address as usize
     }
 
-    fn resolve_zpii<R, M>(&self, rom: &R, mem: &M) -> usize
+    fn resolve_zpii<M>(&self, mem: &M) -> usize
     where
-        R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
-        let indirect_address = self.second_byte_operand(rom) + self.x;
+        let indirect_address = self.second_byte_operand(mem) + self.x;
         let operand_address: u16 = self.deref_mem(mem, indirect_address as usize);
         operand_address as usize
     }
 
-    fn resolve_zpiiy<R, M>(&self, rom: &R, mem: &M) -> usize
+    fn resolve_zpiiy<M>(&self, mem: &M) -> usize
     where
-        R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
         // Deref the zero page pointer
-        let zp = self.second_byte_operand(rom);
+        let zp = self.second_byte_operand(mem);
         let indirect_base = self.deref_mem(mem, zp as usize);
 
         // Add y to the address found
@@ -1158,12 +1152,11 @@ impl Cpu {
         self.pc += 1;
     }
 
-    fn cmp_register<R, M>(&mut self, rom: &R, mem: &M, address_mode: AddressMode, register: u8)
+    fn cmp_register<M>(&mut self, mem: &M, address_mode: AddressMode, register: u8)
     where
-        R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
-        let operand = self.resolve_operand(&address_mode, rom, mem);
+        let operand = self.resolve_operand(&address_mode, mem);
         let result = sub_wrap(register, operand);
         self.update_status_nz(result);
         self.update_status_c(result, register);
@@ -1184,23 +1177,21 @@ impl Cpu {
         result
     }
 
-    fn load_register<R, M>(&mut self, rom: &R, mem: &M, address_mode: AddressMode) -> u8
+    fn load_register<M>(&mut self, mem: &M, address_mode: AddressMode) -> u8
     where
-        R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
-        let value = self.resolve_operand(&address_mode, rom, mem);
+        let value = self.resolve_operand(&address_mode, mem);
         self.update_status_nz(value);
         self.update_pc(address_mode);
         value
     }
 
-    fn store_register<R, M>(&mut self, rom: &R, mem: &mut M, address_mode: AddressMode, val: u8)
+    fn store_register<M>(&mut self, mem: &mut M, address_mode: AddressMode, val: u8)
     where
-        R: Index<usize, Output = u8>,
         M: IndexMut<usize, Output = u8>,
     {
-        let resolved_addr = self.resolve_operand_addr(&address_mode, rom, mem);
+        let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
         mem[resolved_addr] = val;
         self.update_pc(address_mode);
     }
@@ -1234,8 +1225,12 @@ impl Cpu {
 mod tests {
     use super::*;
 
-    fn setup() -> (Cpu, [u8; 65_536]) {
-        (Cpu::new(), [0; 65_536])
+    fn setup(program: Vec<u8>) -> (Cpu, [u8; 65_536]) {
+        let mut mem = [0; 65_536];
+        for (i, instruction) in program.iter().enumerate() {
+            mem[i] = instruction.clone();
+        }
+        (Cpu::new(), mem)
     }
 
     #[test]
@@ -1261,12 +1256,11 @@ mod tests {
 
         #[test]
         fn adc() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x69, 2]);
             cpu.a = 40;
             cpu.p = PC_MASK | PZ_MASK | PN_MASK | PV_MASK; // These should all be cleared
-            let rom = vec![0x69, 2];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1281,11 +1275,10 @@ mod tests {
 
         #[test]
         fn adc_carry() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x69, 1]);
             cpu.a = 255;
-            let rom = vec![0x69, 1];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1305,11 +1298,10 @@ mod tests {
 
         #[test]
         fn and_immediate() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x29, 0b00001111]);
             cpu.a = 0b00111100;
-            let rom = vec![0x29, 0b00001111];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1324,11 +1316,10 @@ mod tests {
 
         #[test]
         fn and_immediate_pn() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x29, 0b10001111]);
             cpu.a = 0b10000000;
-            let rom = vec![0x29, 0b10001111];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1344,11 +1335,10 @@ mod tests {
 
         #[test]
         fn and_immediate_pz() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x29, 0xFF]);
             cpu.a = 0;
-            let rom = vec![0x29, 0xFF];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1364,12 +1354,11 @@ mod tests {
 
         #[test]
         fn and_abs() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x2D, 0xCD, 0xAB]);
             cpu.a = 0b10001111;
             mem[0xABCD] = 0b10111100;
-            let rom = vec![0x2D, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1385,13 +1374,12 @@ mod tests {
 
         #[test]
         fn and_aix() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x3D, 0xC0, 0xAB]);
             cpu.a = 0b10001111;
             cpu.x = 10;
             mem[0xABCA] = 0b10111100;
-            let rom = vec![0x3D, 0xC0, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1408,13 +1396,12 @@ mod tests {
 
         #[test]
         fn and_aiy() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x39, 0xC0, 0xAB]);
             cpu.a = 0b10001111;
             cpu.y = 10;
             mem[0xABCA] = 0b10111100;
-            let rom = vec![0x39, 0xC0, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1431,12 +1418,11 @@ mod tests {
 
         #[test]
         fn and_zp() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x25, 0xCD]);
             cpu.a = 0b10001111;
             mem[0x00CD] = 0b10111100;
-            let rom = vec![0x25, 0xCD];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1452,13 +1438,12 @@ mod tests {
 
         #[test]
         fn and_zpix() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x35, 0xC0]);
             cpu.a = 0b10001111;
             cpu.x = 10;
             mem[0x00CA] = 0b10111100;
-            let rom = vec![0x35, 0xC0];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1475,14 +1460,13 @@ mod tests {
 
         #[test]
         fn and_zpi() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x32, 0xCD]);
             cpu.a = 0b10001111;
             mem[0x00CD] = 0x57;
             mem[0x00CE] = 0x43;
             mem[0x4357] = 0b10111100;
-            let rom = vec![0x32, 0xCD];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1498,15 +1482,14 @@ mod tests {
 
         #[test]
         fn and_zpii() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x21, 0xC0]);
             cpu.a = 0b10001111;
             cpu.x = 10;
             mem[0x00CA] = 0x57;
             mem[0x00CB] = 0x43;
             mem[0x4357] = 0b10111100;
-            let rom = vec![0x21, 0xC0];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1523,15 +1506,14 @@ mod tests {
 
         #[test]
         fn and_zpiiy() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x31, 0xC0]);
             cpu.a = 0b10001111;
             cpu.y = 10;
             mem[0x00C0] = 0x00;
             mem[0x00C1] = 0xFF;
             mem[0xFF0A] = 0b10111100;
-            let rom = vec![0x31, 0xC0];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1552,11 +1534,10 @@ mod tests {
 
         #[test]
         fn asl_acc() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x0A, 0x0A, 0x0A]);
             cpu.a = 0b10100000;
-            let rom = vec![0x0A, 0x0A, 0x0A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
             assert_eq!(
                 cpu,
                 Cpu {
@@ -1568,7 +1549,7 @@ mod tests {
                 }
             );
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
             assert_eq!(
                 cpu,
                 Cpu {
@@ -1580,7 +1561,7 @@ mod tests {
                 }
             );
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
             assert_eq!(
                 cpu,
                 Cpu {
@@ -1595,11 +1576,11 @@ mod tests {
 
         #[test]
         fn asl_abs() {
-            let (mut cpu, mut mem) = setup();
-            mem[0xABCD] = 0b10100000;
             let rom = vec![0x0E, 0xCD, 0xAB, 0x0E, 0xCD, 0xAB, 0x0E, 0xCD, 0xAB];
+            let (mut cpu, mut mem) = setup(rom);
+            mem[0xABCD] = 0b10100000;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
             assert_eq!(mem[0xABCD], 0b01000000);
             assert_eq!(
                 cpu,
@@ -1611,7 +1592,7 @@ mod tests {
                 }
             );
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
             assert_eq!(mem[0xABCD], 0b10000000);
             assert_eq!(
                 cpu,
@@ -1623,7 +1604,7 @@ mod tests {
                 }
             );
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
             assert_eq!(mem[0xABCD], 0b00000000);
             assert_eq!(
                 cpu,
@@ -1638,11 +1619,11 @@ mod tests {
 
         #[test]
         fn asl_zp() {
-            let (mut cpu, mut mem) = setup();
-            mem[0x00CD] = 0b10100000;
             let rom = vec![0x06, 0xCD, 0x06, 0xCD, 0x06, 0xCD];
+            let (mut cpu, mut mem) = setup(rom);
+            mem[0x00CD] = 0b10100000;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
             assert_eq!(mem[0x00CD], 0b01000000);
             assert_eq!(
                 cpu,
@@ -1654,7 +1635,7 @@ mod tests {
                 }
             );
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
             assert_eq!(mem[0x00CD], 0b10000000);
             assert_eq!(
                 cpu,
@@ -1666,7 +1647,7 @@ mod tests {
                 }
             );
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
             assert_eq!(mem[0x00CD], 0b00000000);
             assert_eq!(
                 cpu,
@@ -1686,12 +1667,12 @@ mod tests {
         #[test]
         fn bbr_no_branch() {
             for i in 0..8 {
-                let (mut cpu, mut mem) = setup();
-                mem[0x00CD] = 0xFF;
                 let opcode = 0x0F + (i * 0x10);
                 let rom = vec![opcode, 0xCD, 0xBB];
+                let (mut cpu, mut mem) = setup(rom);
+                mem[0x00CD] = 0xFF;
 
-                cpu.step(&rom, &mut mem);
+                cpu.step(&mut mem);
 
                 assert_eq!(
                     cpu,
@@ -1707,12 +1688,12 @@ mod tests {
         #[test]
         fn bbr_branch() {
             for i in 0..8 {
-                let (mut cpu, mut mem) = setup();
-                mem[0x00CD] = 0x00;
                 let opcode = 0x0F + (i * 0x10);
                 let rom = vec![opcode, 0xCD, 0xBB];
+                let (mut cpu, mut mem) = setup(rom);
+                mem[0x00CD] = 0x00;
 
-                cpu.step(&rom, &mut mem);
+                cpu.step(&mut mem);
 
                 assert_eq!(
                     cpu,
@@ -1728,12 +1709,12 @@ mod tests {
         #[test]
         fn bbs_no_branch() {
             for i in 0..8 {
-                let (mut cpu, mut mem) = setup();
-                mem[0x00CD] = 0x00;
                 let opcode = 0x8F + (i * 0x10);
                 let rom = vec![opcode, 0xCD, 0xBB];
+                let (mut cpu, mut mem) = setup(rom);
+                mem[0x00CD] = 0x00;
 
-                cpu.step(&rom, &mut mem);
+                cpu.step(&mut mem);
 
                 assert_eq!(
                     cpu,
@@ -1749,12 +1730,12 @@ mod tests {
         #[test]
         fn bbs_branch() {
             for i in 0..8 {
-                let (mut cpu, mut mem) = setup();
-                mem[0x00CD] = 0xFF;
                 let opcode = 0x8F + (i * 0x10);
                 let rom = vec![opcode, 0xCD, 0xBB];
+                let (mut cpu, mut mem) = setup(rom);
+                mem[0x00CD] = 0xFF;
 
-                cpu.step(&rom, &mut mem);
+                cpu.step(&mut mem);
 
                 assert_eq!(
                     cpu,
@@ -1769,11 +1750,10 @@ mod tests {
 
         #[test]
         fn bcc_no_branch() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x90, 0xCD]);
             cpu.p = PC_MASK;
-            let rom = vec![0x90, 0xCD];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1788,10 +1768,9 @@ mod tests {
 
         #[test]
         fn bcc_branch() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x90, 0xCD];
+            let (mut cpu, mut mem) = setup(vec![0x90, 0xCD]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1805,10 +1784,9 @@ mod tests {
 
         #[test]
         fn bcs_no_branch() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xB0, 0xCD];
+            let (mut cpu, mut mem) = setup(vec![0xB0, 0xCD]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1822,11 +1800,10 @@ mod tests {
 
         #[test]
         fn bcs_branch() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xB0, 0xCD]);
             cpu.p = PC_MASK;
-            let rom = vec![0xB0, 0xCD];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1841,10 +1818,9 @@ mod tests {
 
         #[test]
         fn beq_no_branch() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xF0, 0xCD];
+            let (mut cpu, mut mem) = setup(vec![0xF0, 0xCD]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1858,11 +1834,10 @@ mod tests {
 
         #[test]
         fn beq_branch() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xF0, 0xCD]);
             cpu.p = PZ_MASK;
-            let rom = vec![0xF0, 0xCD];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1877,10 +1852,9 @@ mod tests {
 
         #[test]
         fn bmi_no_branch() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x30, 0xCD];
+            let (mut cpu, mut mem) = setup(vec![0x30, 0xCD]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1894,11 +1868,10 @@ mod tests {
 
         #[test]
         fn bmi_branch() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x30, 0xCD]);
             cpu.p = PN_MASK;
-            let rom = vec![0x30, 0xCD];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1913,11 +1886,10 @@ mod tests {
 
         #[test]
         fn bne_no_branch() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xD0, 0xCD]);
             cpu.p = PZ_MASK;
-            let rom = vec![0xD0, 0xCD];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1932,10 +1904,9 @@ mod tests {
 
         #[test]
         fn bne_branch() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xD0, 0xCD];
+            let (mut cpu, mut mem) = setup(vec![0xD0, 0xCD]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1949,11 +1920,10 @@ mod tests {
 
         #[test]
         fn bpl_no_branch() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x10, 0xCD]);
             cpu.p = PN_MASK;
-            let rom = vec![0x10, 0xCD];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1968,10 +1938,9 @@ mod tests {
 
         #[test]
         fn bpl_branch() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x10, 0xCD];
+            let (mut cpu, mut mem) = setup(vec![0x10, 0xCD]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -1985,10 +1954,9 @@ mod tests {
 
         #[test]
         fn bra_branch() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x80, 0xCD];
+            let (mut cpu, mut mem) = setup(vec![0x80, 0xCD]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2002,11 +1970,10 @@ mod tests {
 
         #[test]
         fn bvc_no_branch() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x50, 0xCD]);
             cpu.p = PV_MASK;
-            let rom = vec![0x50, 0xCD];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2021,10 +1988,9 @@ mod tests {
 
         #[test]
         fn bvc_branch() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x50, 0xCD];
+            let (mut cpu, mut mem) = setup(vec![0x50, 0xCD]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2038,10 +2004,9 @@ mod tests {
 
         #[test]
         fn bvs_no_branch() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x70, 0xCD];
+            let (mut cpu, mut mem) = setup(vec![0x70, 0xCD]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2055,11 +2020,10 @@ mod tests {
 
         #[test]
         fn bvs_branch() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x70, 0xCD]);
             cpu.p = PV_MASK;
-            let rom = vec![0x70, 0xCD];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2078,11 +2042,10 @@ mod tests {
 
         #[test]
         fn bit_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x89, 0b0000_0000]);
             cpu.p = PN_MASK | PV_MASK; // Should get cleared
-            let rom = vec![0x89, 0b0000_0000];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2097,12 +2060,11 @@ mod tests {
 
         #[test]
         fn bit_nonzero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x89, 0b1100_0001]);
             cpu.a = 0b0000_0001;
             cpu.p = PZ_MASK; // Should get cleared
-            let rom = vec![0x89, 0b1100_0001];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2122,11 +2084,10 @@ mod tests {
 
         #[test]
         fn clc() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x18]);
             cpu.p = PC_MASK;
-            let rom = vec![0x18];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2140,11 +2101,10 @@ mod tests {
 
         #[test]
         fn cld() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xD8]);
             cpu.p = PD_MASK;
-            let rom = vec![0xD8];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2158,11 +2118,10 @@ mod tests {
 
         #[test]
         fn cli() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x58]);
             cpu.p = PI_MASK;
-            let rom = vec![0x58];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2176,11 +2135,10 @@ mod tests {
 
         #[test]
         fn clv() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xB8]);
             cpu.p = PV_MASK;
-            let rom = vec![0xB8];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2198,12 +2156,11 @@ mod tests {
 
         #[test]
         fn cmp_equal() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xC9, 10]);
             cpu.a = 10;
             cpu.p = PN_MASK;
-            let rom = vec![0xC9, 10];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2219,12 +2176,11 @@ mod tests {
 
         #[test]
         fn cmp_less_than() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xC9, 9]);
             cpu.a = 10;
             cpu.p = PZ_MASK | PN_MASK;
-            let rom = vec![0xC9, 9];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2240,12 +2196,11 @@ mod tests {
 
         #[test]
         fn cmp_greater_than() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xC9, 11]);
             cpu.a = 10;
             cpu.p = PZ_MASK | PC_MASK;
-            let rom = vec![0xC9, 11];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2261,12 +2216,11 @@ mod tests {
 
         #[test]
         fn cpx_equal() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xE0, 10]);
             cpu.x = 10;
             cpu.p = PN_MASK;
-            let rom = vec![0xE0, 10];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2282,12 +2236,11 @@ mod tests {
 
         #[test]
         fn cpx_less_than() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xE0, 9]);
             cpu.x = 10;
             cpu.p = PZ_MASK | PN_MASK;
-            let rom = vec![0xE0, 9];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2303,12 +2256,11 @@ mod tests {
 
         #[test]
         fn cpx_greater_than() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xE0, 11]);
             cpu.x = 10;
             cpu.p = PZ_MASK | PC_MASK;
-            let rom = vec![0xE0, 11];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2324,12 +2276,11 @@ mod tests {
 
         #[test]
         fn cpy_equal() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xC0, 10]);
             cpu.y = 10;
             cpu.p = PN_MASK;
-            let rom = vec![0xC0, 10];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2345,12 +2296,11 @@ mod tests {
 
         #[test]
         fn cpy_less_than() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xC0, 9]);
             cpu.y = 10;
             cpu.p = PZ_MASK | PN_MASK;
-            let rom = vec![0xC0, 9];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2366,12 +2316,11 @@ mod tests {
 
         #[test]
         fn cpy_greater_than() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xC0, 11]);
             cpu.y = 10;
             cpu.p = PZ_MASK | PC_MASK;
-            let rom = vec![0xC0, 11];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2391,12 +2340,11 @@ mod tests {
 
         #[test]
         fn dec_acc() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x3A]);
             cpu.a = 10;
             cpu.p = PZ_MASK | PN_MASK; // Should get cleared
-            let rom = vec![0x3A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2411,12 +2359,11 @@ mod tests {
 
         #[test]
         fn dec_acc_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x3A]);
             cpu.a = 1;
             cpu.p = PN_MASK; // Should get cleared
-            let rom = vec![0x3A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2432,12 +2379,11 @@ mod tests {
 
         #[test]
         fn dec_acc_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x3A]);
             cpu.a = 0;
             cpu.p = PZ_MASK; // Should get cleared
-            let rom = vec![0x3A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2453,12 +2399,11 @@ mod tests {
 
         #[test]
         fn dec_abs() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xCE, 0xCD, 0xAB]);
             cpu.p = PZ_MASK | PN_MASK; // Should get cleared
             mem[0xABCD] = 10;
-            let rom = vec![0xCE, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2473,12 +2418,11 @@ mod tests {
 
         #[test]
         fn dec_abs_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xCE, 0xCD, 0xAB]);
             cpu.p = PN_MASK; // Should get cleared
             mem[0xABCD] = 1;
-            let rom = vec![0xCE, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2494,12 +2438,11 @@ mod tests {
 
         #[test]
         fn dec_abs_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xCE, 0xCD, 0xAB]);
             cpu.p = PZ_MASK; // Should get cleared
             mem[0xABCD] = 0;
-            let rom = vec![0xCE, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2515,12 +2458,11 @@ mod tests {
 
         #[test]
         fn dex() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xCA]);
             cpu.p = PZ_MASK | PN_MASK; // Should get cleared
             cpu.x = 10;
-            let rom = vec![0xCA];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2535,12 +2477,11 @@ mod tests {
 
         #[test]
         fn dex_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xCA]);
             cpu.p = PN_MASK; // Should get cleared
             cpu.x = 1;
-            let rom = vec![0xCA];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2556,12 +2497,11 @@ mod tests {
 
         #[test]
         fn dex_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xCA]);
             cpu.p = PZ_MASK; // Should get cleared
             cpu.x = 0;
-            let rom = vec![0xCA];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2577,12 +2517,11 @@ mod tests {
 
         #[test]
         fn dey() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x88]);
             cpu.p = PZ_MASK | PN_MASK; // Should get cleared
             cpu.y = 10;
-            let rom = vec![0x88];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2597,12 +2536,11 @@ mod tests {
 
         #[test]
         fn dey_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x88]);
             cpu.p = PN_MASK; // Should get cleared
             cpu.y = 1;
-            let rom = vec![0x88];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2618,12 +2556,11 @@ mod tests {
 
         #[test]
         fn dey_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x88]);
             cpu.p = PZ_MASK; // Should get cleared
             cpu.y = 0;
-            let rom = vec![0x88];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2643,12 +2580,11 @@ mod tests {
 
         #[test]
         fn eor_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x49, 0b11111111]);
             cpu.p = PN_MASK; // Should get cleared
             cpu.a = 0b11111111;
-            let rom = vec![0x49, 0b11111111];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2664,12 +2600,11 @@ mod tests {
 
         #[test]
         fn eor_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x49, 0b0110_0110]);
             cpu.p = PZ_MASK; // Should get cleared
             cpu.a = 0b1001_1001;
-            let rom = vec![0x49, 0b0110_0110];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2689,11 +2624,10 @@ mod tests {
 
         #[test]
         fn inc_acc() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x1A];
+            let (mut cpu, mut mem) = setup(vec![0x1A]);
             cpu.a = 41;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2708,11 +2642,10 @@ mod tests {
 
         #[test]
         fn inc_acc_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x1A];
+            let (mut cpu, mut mem) = setup(vec![0x1A]);
             cpu.a = u8::MAX;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2728,12 +2661,11 @@ mod tests {
 
         #[test]
         fn inc_acc_reset_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x1A];
+            let (mut cpu, mut mem) = setup(vec![0x1A]);
             cpu.a = 5;
             cpu.p = PZ_MASK;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2749,11 +2681,10 @@ mod tests {
 
         #[test]
         fn inc_abs() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xEE, 0xCD, 0xAB];
+            let (mut cpu, mut mem) = setup(vec![0xEE, 0xCD, 0xAB]);
             mem[0xABCD] = 41;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 42);
             assert_eq!(
@@ -2768,11 +2699,10 @@ mod tests {
 
         #[test]
         fn inc_abs_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xEE, 0xCD, 0xAB];
+            let (mut cpu, mut mem) = setup(vec![0xEE, 0xCD, 0xAB]);
             mem[0xABCD] = u8::MAX;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 0);
             assert_eq!(
@@ -2788,12 +2718,11 @@ mod tests {
 
         #[test]
         fn inc_abs_reset_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xEE, 0xCD, 0xAB];
+            let (mut cpu, mut mem) = setup(vec![0xEE, 0xCD, 0xAB]);
             mem[0xABCD] = 5;
             cpu.p = PZ_MASK;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 6);
             assert_eq!(
@@ -2809,11 +2738,10 @@ mod tests {
 
         #[test]
         fn inx() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xE8];
+            let (mut cpu, mut mem) = setup(vec![0xE8]);
             cpu.x = 41;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2828,11 +2756,10 @@ mod tests {
 
         #[test]
         fn inx_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xE8];
+            let (mut cpu, mut mem) = setup(vec![0xE8]);
             cpu.x = u8::MAX;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2848,12 +2775,11 @@ mod tests {
 
         #[test]
         fn inx_reset_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xE8];
+            let (mut cpu, mut mem) = setup(vec![0xE8]);
             cpu.x = 5;
             cpu.p = PZ_MASK;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2869,11 +2795,10 @@ mod tests {
 
         #[test]
         fn inx_neg() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xE8];
+            let (mut cpu, mut mem) = setup(vec![0xE8]);
             cpu.x = 127;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2889,12 +2814,11 @@ mod tests {
 
         #[test]
         fn inx_reset_neg() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xE8];
+            let (mut cpu, mut mem) = setup(vec![0xE8]);
             cpu.x = u8::MAX;
             cpu.p = PN_MASK;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2910,11 +2834,10 @@ mod tests {
 
         #[test]
         fn iny() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xC8];
+            let (mut cpu, mut mem) = setup(vec![0xC8]);
             cpu.y = 40;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2929,11 +2852,10 @@ mod tests {
 
         #[test]
         fn iny_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xC8];
+            let (mut cpu, mut mem) = setup(vec![0xC8]);
             cpu.y = u8::MAX;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2949,12 +2871,11 @@ mod tests {
 
         #[test]
         fn iny_reset_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xC8];
+            let (mut cpu, mut mem) = setup(vec![0xC8]);
             cpu.y = 5;
             cpu.p = PZ_MASK;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2970,11 +2891,10 @@ mod tests {
 
         #[test]
         fn iny_neg() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xC8];
+            let (mut cpu, mut mem) = setup(vec![0xC8]);
             cpu.y = 127;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -2990,12 +2910,11 @@ mod tests {
 
         #[test]
         fn iny_reset_neg() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xC8];
+            let (mut cpu, mut mem) = setup(vec![0xC8]);
             cpu.y = u8::MAX;
             cpu.p = PN_MASK;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3015,10 +2934,9 @@ mod tests {
 
         #[test]
         fn jmp_abs() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x4C, 0x0A, 0x80];
+            let (mut cpu, mut mem) = setup(vec![0x4C, 0x0A, 0x80]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3032,12 +2950,11 @@ mod tests {
 
         #[test]
         fn jmp_ai() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x6C, 0x0A, 0x80];
+            let (mut cpu, mut mem) = setup(vec![0x6C, 0x0A, 0x80]);
             mem[0x800A] = 0xCD;
             mem[0x800B] = 0xAB;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3051,14 +2968,13 @@ mod tests {
 
         #[test]
         fn jmp_aii() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x7C, 0x00, 0x80];
+            let (mut cpu, mut mem) = setup(vec![0x7C, 0x00, 0x80]);
 
             cpu.x = 6;
             mem[0x8006] = 0xCD;
             mem[0x8007] = 0xAB;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3073,15 +2989,14 @@ mod tests {
 
         #[test]
         fn jsr() {
-            let (mut cpu, mut mem) = setup();
-            cpu.s = 0xFF;
-
             // Pad rom with no-ops to get the PC to an interesting location
             let mut rom = vec![0xEA; 300];
             rom.extend(vec![0x20, 0xCD, 0xAB]);
+            let (mut cpu, mut mem) = setup(rom);
+            cpu.s = 0xFF;
 
             for _ in 0..301 {
-                cpu.step(&rom, &mut mem);
+                cpu.step(&mut mem);
             }
 
             assert_eq!(
@@ -3101,13 +3016,12 @@ mod tests {
 
         #[test]
         fn rts() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x60]);
             cpu.s = 0xFD;
             mem[0x01FF] = 0x01;
             mem[0x01FE] = 0x2E;
-            let rom = vec![0x60];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3126,11 +3040,10 @@ mod tests {
 
         #[test]
         fn lda_immediate() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xA9, 0xED]);
             cpu.p = PZ_MASK; // Should be cleared
-            let rom = vec![0xA9, 0xED];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3146,12 +3059,11 @@ mod tests {
 
         #[test]
         fn lda_abs() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xAD, 0xCD, 0xAB]);
             cpu.p = PN_MASK; // Should be cleared
             mem[0xABCD] = 0;
-            let rom = vec![0xAD, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3167,11 +3079,10 @@ mod tests {
 
         #[test]
         fn ldx_immediate() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xA2, 0xED]);
             cpu.p = PZ_MASK; // Should be cleared
-            let rom = vec![0xA2, 0xED];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3187,12 +3098,11 @@ mod tests {
 
         #[test]
         fn ldx_abs() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xAE, 0xCD, 0xAB]);
             cpu.p = PN_MASK; // Should be cleared
             mem[0xABCD] = 0;
-            let rom = vec![0xAE, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3208,13 +3118,12 @@ mod tests {
 
         #[test]
         fn ldx_zpiy() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xB6, 0xC0]);
             cpu.p = PN_MASK; // Should be cleared
             cpu.y = 10;
             mem[0x00CA] = 42;
-            let rom = vec![0xB6, 0xC0];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3230,11 +3139,10 @@ mod tests {
 
         #[test]
         fn ldy_immediate() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xA0, 0xED]);
             cpu.p = PZ_MASK; // Should be cleared
-            let rom = vec![0xA0, 0xED];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3250,12 +3158,11 @@ mod tests {
 
         #[test]
         fn ldy_abs() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xAC, 0xCD, 0xAB]);
             cpu.p = PN_MASK; // Should be cleared
             mem[0xABCD] = 0;
-            let rom = vec![0xAC, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3271,13 +3178,12 @@ mod tests {
 
         #[test]
         fn ldy_zpix() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xB4, 0xC0]);
             cpu.p = PN_MASK; // Should be cleared
             cpu.x = 10;
             mem[0x00CA] = 42;
-            let rom = vec![0xB4, 0xC0];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3297,12 +3203,11 @@ mod tests {
 
         #[test]
         fn lsr_acc() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x4A]);
             cpu.p = PN_MASK | PZ_MASK | PC_MASK; // Should be cleared
             cpu.a = 0b1111_0000;
-            let rom = vec![0x4A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3317,12 +3222,11 @@ mod tests {
 
         #[test]
         fn lsr_acc_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x4A]);
             cpu.p = PN_MASK; // Should be cleared
             cpu.a = 0b0000_0001;
-            let rom = vec![0x4A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3338,12 +3242,11 @@ mod tests {
 
         #[test]
         fn lsr_abs() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x4E, 0xCD, 0xAB]);
             cpu.p = PN_MASK | PZ_MASK | PC_MASK; // Should be cleared
             mem[0xABCD] = 0b1111_0000;
-            let rom = vec![0x4E, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 0b0111_1000);
             assert_eq!(
@@ -3358,12 +3261,11 @@ mod tests {
 
         #[test]
         fn lsr_abs_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x4E, 0xCD, 0xAB]);
             cpu.p = PN_MASK; // Should be cleared
             mem[0xABCD] = 0b0000_0001;
-            let rom = vec![0x4E, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 0);
             assert_eq!(
@@ -3383,10 +3285,9 @@ mod tests {
 
         #[test]
         fn nop() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xEA];
+            let (mut cpu, mut mem) = setup(vec![0xEA]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3400,10 +3301,9 @@ mod tests {
 
         #[test]
         fn stp() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xDB];
+            let (mut cpu, mut mem) = setup(vec![0xDB]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3417,10 +3317,9 @@ mod tests {
 
         #[test]
         fn wai() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xCB];
+            let (mut cpu, mut mem) = setup(vec![0xCB]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3438,12 +3337,11 @@ mod tests {
 
         #[test]
         fn ora_immediate() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x09, 0b0011_1100]);
             cpu.a = 0b0000_0001;
             cpu.p = PN_MASK | PZ_MASK; // Should be cleared
-            let rom = vec![0x09, 0b0011_1100];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3458,12 +3356,11 @@ mod tests {
 
         #[test]
         fn ora_immediate_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x09, 0]);
             cpu.a = 0;
             cpu.p = PN_MASK; // Should be cleared
-            let rom = vec![0x09, 0];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3479,12 +3376,11 @@ mod tests {
 
         #[test]
         fn ora_immediate_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x09, 0b1000_0000]);
             cpu.a = 0b0000_0001;
             cpu.p = PZ_MASK; // Should be cleared
-            let rom = vec![0x09, 0b1000_0000];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3504,11 +3400,10 @@ mod tests {
 
         #[test]
         fn pha() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x48]);
             cpu.a = 42;
-            let rom = vec![0x48];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0x01FF], 42);
             assert_eq!(
@@ -3525,11 +3420,10 @@ mod tests {
 
         #[test]
         fn php() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x08]);
             cpu.p = 42;
-            let rom = vec![0x08];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0x01FF], 42);
             assert_eq!(
@@ -3546,11 +3440,10 @@ mod tests {
 
         #[test]
         fn phx() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xDA]);
             cpu.x = 42;
-            let rom = vec![0xDA];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0x01FF], 42);
             assert_eq!(
@@ -3567,11 +3460,10 @@ mod tests {
 
         #[test]
         fn phy() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x5A]);
             cpu.y = 42;
-            let rom = vec![0x5A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0x01FF], 42);
             assert_eq!(
@@ -3588,14 +3480,13 @@ mod tests {
 
         #[test]
         fn pla_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x68]);
             cpu.a = 42;
             cpu.s = 0xFE;
             cpu.p = PN_MASK;
             mem[0x01FF] = 0;
-            let rom = vec![0x68];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3612,13 +3503,12 @@ mod tests {
 
         #[test]
         fn pla_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x68]);
             cpu.s = 0xFE;
             cpu.p = PZ_MASK;
             mem[0x01FF] = 200;
-            let rom = vec![0x68];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3635,13 +3525,12 @@ mod tests {
 
         #[test]
         fn plp() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x28]);
             cpu.s = 0xFE;
             cpu.p = 63;
             mem[0x01FF] = 42;
-            let rom = vec![0x28];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3657,14 +3546,13 @@ mod tests {
 
         #[test]
         fn plx_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xFA]);
             cpu.x = 42;
             cpu.s = 0xFE;
             cpu.p = PN_MASK;
             mem[0x01FF] = 0;
-            let rom = vec![0xFA];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3681,13 +3569,12 @@ mod tests {
 
         #[test]
         fn plx_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0xFA]);
             cpu.s = 0xFE;
             cpu.p = PZ_MASK;
             mem[0x01FF] = 200;
-            let rom = vec![0xFA];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3704,14 +3591,13 @@ mod tests {
 
         #[test]
         fn ply_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x7A]);
             cpu.y = 42;
             cpu.s = 0xFE;
             cpu.p = PN_MASK;
             mem[0x01FF] = 0;
-            let rom = vec![0x7A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3728,13 +3614,12 @@ mod tests {
 
         #[test]
         fn ply_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x7A]);
             cpu.s = 0xFE;
             cpu.p = PZ_MASK;
             mem[0x01FF] = 200;
-            let rom = vec![0x7A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3756,12 +3641,12 @@ mod tests {
         #[test]
         fn rmb_all_bits() {
             for i in 0..8 {
-                let (mut cpu, mut mem) = setup();
-                mem[0x00CD] = 0xFF;
                 let opcode = 0x07 + (i * 0x10);
                 let rom = vec![opcode, 0xCD];
+                let (mut cpu, mut mem) = setup(rom);
+                mem[0x00CD] = 0xFF;
 
-                cpu.step(&rom, &mut mem);
+                cpu.step(&mut mem);
 
                 assert_eq!(mem[0x00CD], 0xFF ^ (1 << i));
                 assert_eq!(
@@ -3781,12 +3666,11 @@ mod tests {
 
         #[test]
         fn rol_acc_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x2A]);
             cpu.p = PN_MASK; // Should be cleared
             cpu.a = 0b1000_0000;
-            let rom = vec![0x2A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3802,12 +3686,11 @@ mod tests {
 
         #[test]
         fn rol_acc_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x2A]);
             cpu.p = PZ_MASK | PC_MASK; // Should be cleared
             cpu.a = 0b0100_0000;
-            let rom = vec![0x2A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3823,12 +3706,11 @@ mod tests {
 
         #[test]
         fn rol_abs_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x2E, 0xCD, 0xAB]);
             cpu.p = PN_MASK; // Should be cleared
             mem[0xABCD] = 0b1000_0000;
-            let rom = vec![0x2E, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 0);
             assert_eq!(
@@ -3844,12 +3726,11 @@ mod tests {
 
         #[test]
         fn rol_abs_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x2E, 0xCD, 0xAB]);
             cpu.p = PZ_MASK | PC_MASK; // Should be cleared
             mem[0xABCD] = 0b0100_0000;
-            let rom = vec![0x2E, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 0b1000_0001);
             assert_eq!(
@@ -3865,12 +3746,11 @@ mod tests {
 
         #[test]
         fn ror_acc_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x6A]);
             cpu.p = PN_MASK; // Should be cleared
             cpu.a = 0b0000_0001;
-            let rom = vec![0x6A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3886,12 +3766,11 @@ mod tests {
 
         #[test]
         fn ror_acc_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x6A]);
             cpu.p = PZ_MASK | PC_MASK; // Should be cleared
             cpu.a = 0b0000_0010;
-            let rom = vec![0x6A];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3907,12 +3786,11 @@ mod tests {
 
         #[test]
         fn ror_abs_zero() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x6E, 0xCD, 0xAB]);
             cpu.p = PN_MASK; // Should be cleared
             mem[0xABCD] = 0b0000_0001;
-            let rom = vec![0x6E, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 0);
             assert_eq!(
@@ -3928,12 +3806,11 @@ mod tests {
 
         #[test]
         fn ror_abs_neg() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x6E, 0xCD, 0xAB]);
             cpu.p = PZ_MASK | PC_MASK; // Should be cleared
             mem[0xABCD] = 0b0000_0010;
-            let rom = vec![0x6E, 0xCD, 0xAB];
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 0b1000_0001);
             assert_eq!(
@@ -3962,10 +3839,9 @@ mod tests {
 
         #[test]
         fn sec() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x38];
+            let (mut cpu, mut mem) = setup(vec![0x38]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3980,10 +3856,9 @@ mod tests {
 
         #[test]
         fn sed() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xF8];
+            let (mut cpu, mut mem) = setup(vec![0xF8]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -3998,10 +3873,9 @@ mod tests {
 
         #[test]
         fn sei() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x78];
+            let (mut cpu, mut mem) = setup(vec![0x78]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4021,12 +3895,12 @@ mod tests {
         #[test]
         fn smb_all_bits() {
             for i in 0..8 {
-                let (mut cpu, mut mem) = setup();
-                mem[0x00CD] = 0;
                 let opcode = 0x87 + (i * 0x10);
                 let rom = vec![opcode, 0xCD];
+                let (mut cpu, mut mem) = setup(rom);
+                mem[0x00CD] = 0;
 
-                cpu.step(&rom, &mut mem);
+                cpu.step(&mut mem);
 
                 assert_eq!(mem[0x00CD], 1 << i);
                 assert_eq!(
@@ -4046,11 +3920,10 @@ mod tests {
 
         #[test]
         fn sta_abs() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x8D, 0x02, 0x60];
+            let (mut cpu, mut mem) = setup(vec![0x8D, 0x02, 0x60]);
 
             cpu.a = 57;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4067,16 +3940,14 @@ mod tests {
 
         #[test]
         fn sta_zpii() {
-            let (mut cpu, mut mem) = setup();
+            let (mut cpu, mut mem) = setup(vec![0x81, 0xC0]);
             cpu.x = 10;
             cpu.a = 57;
             mem[0x00CA] = 0x57;
             mem[0x00CB] = 0x43;
             mem[0x4357] = 0;
 
-            let rom = vec![0x81, 0xC0];
-
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4094,11 +3965,10 @@ mod tests {
 
         #[test]
         fn stx_abs() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x8E, 0x02, 0x60];
+            let (mut cpu, mut mem) = setup(vec![0x8E, 0x02, 0x60]);
 
             cpu.x = 57;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4115,11 +3985,10 @@ mod tests {
 
         #[test]
         fn sty_zp() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x84, 0xCD];
+            let (mut cpu, mut mem) = setup(vec![0x84, 0xCD]);
             cpu.y = 57;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4136,12 +4005,11 @@ mod tests {
 
         #[test]
         fn stz_aix() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x9E, 0xC0, 0xAB];
+            let (mut cpu, mut mem) = setup(vec![0x9E, 0xC0, 0xAB]);
             cpu.x = 5;
             mem[0xABC5] = 42;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4162,12 +4030,11 @@ mod tests {
 
         #[test]
         fn tax_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xAA];
+            let (mut cpu, mut mem) = setup(vec![0xAA]);
 
             cpu.a = 0;
             cpu.p = PN_MASK;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4184,12 +4051,11 @@ mod tests {
 
         #[test]
         fn tax_neg() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xAA];
+            let (mut cpu, mut mem) = setup(vec![0xAA]);
 
             cpu.a = 200;
             cpu.p = PZ_MASK;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4206,12 +4072,11 @@ mod tests {
 
         #[test]
         fn tay_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xA8];
+            let (mut cpu, mut mem) = setup(vec![0xA8]);
 
             cpu.a = 0;
             cpu.p = PN_MASK;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4228,12 +4093,11 @@ mod tests {
 
         #[test]
         fn tay_neg() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xA8];
+            let (mut cpu, mut mem) = setup(vec![0xA8]);
 
             cpu.a = 200;
             cpu.p = PZ_MASK;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4250,12 +4114,11 @@ mod tests {
 
         #[test]
         fn tsx_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xBA];
+            let (mut cpu, mut mem) = setup(vec![0xBA]);
 
             cpu.s = 0;
             cpu.p = PN_MASK;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4271,12 +4134,11 @@ mod tests {
 
         #[test]
         fn tsx_neg() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0xBA];
+            let (mut cpu, mut mem) = setup(vec![0xBA]);
 
             cpu.s = 200;
             cpu.p = PZ_MASK;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4293,11 +4155,10 @@ mod tests {
 
         #[test]
         fn txa_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x8A];
+            let (mut cpu, mut mem) = setup(vec![0x8A]);
 
             cpu.p = PN_MASK;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4312,12 +4173,11 @@ mod tests {
 
         #[test]
         fn txa_neg() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x8A];
+            let (mut cpu, mut mem) = setup(vec![0x8A]);
 
             cpu.x = 200;
             cpu.p = PZ_MASK;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4334,10 +4194,9 @@ mod tests {
 
         #[test]
         fn txs_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x9A];
+            let (mut cpu, mut mem) = setup(vec![0x9A]);
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4352,11 +4211,10 @@ mod tests {
 
         #[test]
         fn txs_neg() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x9A];
+            let (mut cpu, mut mem) = setup(vec![0x9A]);
 
             cpu.x = 200;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4372,11 +4230,10 @@ mod tests {
 
         #[test]
         fn tya_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x98];
+            let (mut cpu, mut mem) = setup(vec![0x98]);
 
             cpu.p = PN_MASK;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4391,12 +4248,11 @@ mod tests {
 
         #[test]
         fn tya_neg() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x98];
+            let (mut cpu, mut mem) = setup(vec![0x98]);
 
             cpu.y = 200;
             cpu.p = PZ_MASK;
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,
@@ -4417,13 +4273,12 @@ mod tests {
 
         #[test]
         fn trb() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x1C, 0xCD, 0xAB];
+            let (mut cpu, mut mem) = setup(vec![0x1C, 0xCD, 0xAB]);
             mem[0xABCD] = 0b0011_1100;
             cpu.a = 0b0000_1111;
             cpu.p = PZ_MASK;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 0b0011_0000);
             assert_eq!(
@@ -4439,12 +4294,11 @@ mod tests {
 
         #[test]
         fn trb_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x1C, 0xCD, 0xAB];
+            let (mut cpu, mut mem) = setup(vec![0x1C, 0xCD, 0xAB]);
             mem[0xABCD] = 0b0000_1100;
             cpu.a = 0b0000_1111;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 0);
             assert_eq!(
@@ -4461,13 +4315,12 @@ mod tests {
 
         #[test]
         fn tsb() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x0C, 0xCD, 0xAB];
+            let (mut cpu, mut mem) = setup(vec![0x0C, 0xCD, 0xAB]);
             mem[0xABCD] = 0b0011_1100;
             cpu.a = 0b0000_1111;
             cpu.p = PZ_MASK;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 0b0011_1111);
             assert_eq!(
@@ -4483,11 +4336,10 @@ mod tests {
 
         #[test]
         fn tsb_zero() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x0C, 0xCD, 0xAB];
+            let (mut cpu, mut mem) = setup(vec![0x0C, 0xCD, 0xAB]);
             cpu.p = PZ_MASK;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(mem[0xABCD], 0);
             assert_eq!(
@@ -4507,17 +4359,16 @@ mod tests {
 
         #[test]
         fn brk() {
-            let (mut cpu, mut mem) = setup();
+            // Pad rom with no-ops to get the PC to an interesting location
+            let mut rom = vec![0xEA; 300];
+            rom.extend(vec![0x00]);
+            let (mut cpu, mut mem) = setup(rom);
             cpu.p = PZ_MASK | PN_MASK | PD_MASK;
             mem[0xFFFE] = 0xCD;
             mem[0xFFFF] = 0xAB;
 
-            // Pad rom with no-ops to get the PC to an interesting location
-            let mut rom = vec![0xEA; 300];
-            rom.extend(vec![0x00]);
-
             for _ in 0..301 {
-                cpu.step(&rom, &mut mem);
+                cpu.step(&mut mem);
             }
 
             assert_eq!(
@@ -4540,25 +4391,23 @@ mod tests {
         #[test]
         #[should_panic]
         fn brk_panic() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x00];
+            let (mut cpu, mut mem) = setup(vec![0x00]);
 
             cpu.p = PI_MASK;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
         }
 
         #[test]
         fn rti() {
-            let (mut cpu, mut mem) = setup();
-            let rom = vec![0x40];
+            let (mut cpu, mut mem) = setup(vec![0x40]);
             cpu.p = PZ_MASK | PN_MASK | PI_MASK;
             cpu.s = 0xFC;
             mem[0x01FF] = 0x01;
             mem[0x01FE] = 0x2D;
             mem[0x01FD] = PZ_MASK | PN_MASK;
 
-            cpu.step(&rom, &mut mem);
+            cpu.step(&mut mem);
 
             assert_eq!(
                 cpu,

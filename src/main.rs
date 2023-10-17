@@ -1,5 +1,4 @@
 use emu_6502::cpu::Cpu;
-use emu_6502::rom::Rom;
 
 use std::io::{stdin, stdout, Read, Write};
 
@@ -13,10 +12,9 @@ fn pause() {
 fn main() {
     let mut cpu = Cpu::new();
     let mut mem = [0; 65_536];
-    let rom = Rom::load_binary("binary.out".to_string());
 
     loop {
-        cpu.step(&rom, &mut mem);
+        cpu.step(&mut mem);
         println!("{}", cpu);
         pause();
     }
