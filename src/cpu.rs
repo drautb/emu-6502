@@ -8,8 +8,8 @@
  */
 use std::fmt;
 use std::num::Wrapping;
-use std::ops::Index;
-use std::ops::IndexMut;
+
+use crate::Memory;
 
 #[derive(Debug)]
 enum AddressMode {
@@ -526,10 +526,7 @@ impl Cpu {
         }
     }
 
-    pub fn reset<M>(&mut self, mem: &M)
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    pub fn reset(&mut self, mem: &Memory) {
         self.ir = 0;
         self.a = 0;
         self.x = 0;
@@ -539,10 +536,7 @@ impl Cpu {
         self.s = 0xFF;
     }
 
-    pub fn step<M>(&mut self, mem: &mut M)
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    pub fn step(&mut self, mem: &mut Memory) {
         let opcode = mem[self.pc];
         let instruction = load_instruction(opcode);
         self.ir = opcode;
@@ -1001,10 +995,7 @@ impl Cpu {
         (PC_MASK & self.p) != 0
     }
 
-    fn resolve_operand_addr<M>(&mut self, address_mode: &AddressMode, mem: &M) -> usize
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn resolve_operand_addr(&mut self, address_mode: &AddressMode, mem: &Memory) -> usize {
         match address_mode {
             AddressMode::ABS => self.resolve_abs(mem),
             AddressMode::AIX => self.resolve_aix(mem),
@@ -1025,103 +1016,64 @@ impl Cpu {
         }
     }
 
-    fn resolve_operand<M>(&mut self, address_mode: &AddressMode, mem: &M) -> u8
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn resolve_operand(&mut self, address_mode: &AddressMode, mem: &Memory) -> u8 {
         match address_mode {
             AddressMode::IMMEDIATE => self.second_byte_operand(mem),
             _ => mem[self.resolve_operand_addr(address_mode, mem)],
         }
     }
 
-    fn second_byte_operand<M>(&self, mem: &M) -> u8
-    where
-        M: Index<usize, Output = u8>,
-    {
+    fn second_byte_operand(&self, mem: &Memory) -> u8 {
         mem[self.pc + 1]
     }
 
-    fn third_byte_operand<M>(&self, mem: &M) -> u8
-    where
-        M: Index<usize, Output = u8>,
-    {
+    fn third_byte_operand(&self, mem: &Memory) -> u8 {
         mem[self.pc + 2]
     }
 
-    fn two_byte_operand<M>(&self, mem: &M) -> u16
-    where
-        M: Index<usize, Output = u8>,
-    {
+    fn two_byte_operand(&self, mem: &Memory) -> u16 {
         let op_l: u16 = mem[self.pc + 1].into();
         let op_h: u16 = mem[self.pc + 2].into();
         (op_h << 8) | op_l
     }
 
-    fn resolve_abs<M>(&mut self, mem: &M) -> usize
-    where
-        M: Index<usize, Output = u8>,
-    {
+    fn resolve_abs(&mut self, mem: &Memory) -> usize {
         self.two_byte_operand(mem) as usize
     }
 
-    fn resolve_aix<M>(&self, mem: &M) -> usize
-    where
-        M: Index<usize, Output = u8>,
-    {
+    fn resolve_aix(&self, mem: &Memory) -> usize {
         (self.two_byte_operand(mem) + self.x as u16) as usize
     }
 
-    fn resolve_aiy<M>(&self, mem: &M) -> usize
-    where
-        M: Index<usize, Output = u8>,
-    {
+    fn resolve_aiy(&self, mem: &Memory) -> usize {
         (self.two_byte_operand(mem) + self.y as u16) as usize
     }
 
-    fn resolve_zp<M>(&self, mem: &M) -> usize
-    where
-        M: Index<usize, Output = u8>,
-    {
+    fn resolve_zp(&self, mem: &Memory) -> usize {
         self.second_byte_operand(mem) as usize
     }
 
-    fn resolve_zpix<M>(&self, mem: &M) -> usize
-    where
-        M: Index<usize, Output = u8>,
-    {
+    fn resolve_zpix(&self, mem: &Memory) -> usize {
         (self.second_byte_operand(mem) + self.x) as usize
     }
 
-    fn resolve_zpiy<M>(&self, mem: &M) -> usize
-    where
-        M: Index<usize, Output = u8>,
-    {
+    fn resolve_zpiy(&self, mem: &Memory) -> usize {
         (self.second_byte_operand(mem) + self.y) as usize
     }
 
-    fn resolve_zpi<M>(&self, mem: &M) -> usize
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn resolve_zpi(&self, mem: &Memory) -> usize {
         let indirect_address = self.second_byte_operand(mem);
         let operand_address: u16 = self.deref_mem(mem, indirect_address as usize);
         operand_address as usize
     }
 
-    fn resolve_zpii<M>(&self, mem: &M) -> usize
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn resolve_zpii(&self, mem: &Memory) -> usize {
         let indirect_address = self.second_byte_operand(mem) + self.x;
         let operand_address: u16 = self.deref_mem(mem, indirect_address as usize);
         operand_address as usize
     }
 
-    fn resolve_zpiiy<M>(&self, mem: &M) -> usize
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn resolve_zpiiy(&self, mem: &Memory) -> usize {
         // Deref the zero page pointer
         let zp = self.second_byte_operand(mem);
         let indirect_base = self.deref_mem(mem, zp as usize);
@@ -1133,10 +1085,7 @@ impl Cpu {
         indirect_address as usize
     }
 
-    fn deref_mem<M>(&self, mem: &M, addr: usize) -> u16
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn deref_mem(&self, mem: &Memory, addr: usize) -> u16 {
         let new_addr_l: u16 = mem[addr].into();
         let new_addr_h: u16 = mem[addr + 1].into();
         (new_addr_h << 8) | new_addr_l
@@ -1190,10 +1139,7 @@ impl Cpu {
         self.pc += 1;
     }
 
-    fn cmp_register<M>(&mut self, mem: &M, address_mode: AddressMode, register: u8)
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn cmp_register(&mut self, mem: &Memory, address_mode: AddressMode, register: u8) {
         let operand = self.resolve_operand(&address_mode, mem);
         let result = sub_wrap(register, operand);
         self.update_status_nz(result);
@@ -1215,45 +1161,30 @@ impl Cpu {
         result
     }
 
-    fn load_register<M>(&mut self, mem: &M, address_mode: AddressMode) -> u8
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn load_register(&mut self, mem: &Memory, address_mode: AddressMode) -> u8 {
         let value = self.resolve_operand(&address_mode, mem);
         self.update_status_nz(value);
         self.update_pc(address_mode);
         value
     }
 
-    fn store_register<M>(&mut self, mem: &mut M, address_mode: AddressMode, val: u8)
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn store_register(&mut self, mem: &mut Memory, address_mode: AddressMode, val: u8) {
         let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
         mem[resolved_addr] = val;
         self.update_pc(address_mode);
     }
 
-    fn push_stack_inst<M>(&mut self, mem: &mut M, val: u8)
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn push_stack_inst(&mut self, mem: &mut Memory, val: u8) {
         self.push_stack(mem, val);
         self.incr_pc();
     }
 
-    fn push_stack<M>(&mut self, mem: &mut M, val: u8)
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn push_stack(&mut self, mem: &mut Memory, val: u8) {
         mem[(self.s as u16 + 0x100) as usize] = val;
         self.s -= 1;
     }
 
-    fn pop_stack<M>(&mut self, mem: &mut M) -> u8
-    where
-        M: IndexMut<usize, Output = u8>,
-    {
+    fn pop_stack(&mut self, mem: &mut Memory) -> u8 {
         self.s += 1;
         mem[(self.s as u16 + 0x100) as usize]
     }

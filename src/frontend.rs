@@ -1,10 +1,10 @@
-use super::cpu::Cpu;
+use crate::cpu::Cpu;
 use crate::emulator::Emulator;
+use crate::Memory;
 use eframe::egui;
 use eframe::egui::{Button, Ui, Vec2};
 use eframe::epaint::Color32;
 use egui_extras::Column;
-use std::ops::Index;
 
 const STATUS_FLAG_SIZE: Vec2 = Vec2::new(26.0, 26.0);
 const STATUS_FLAG_CLEAR: Color32 = Color32::from_gray(64);
@@ -159,10 +159,7 @@ fn show_status_flag(ui: &mut Ui, label: &str, set: bool) {
     );
 }
 
-pub fn show_memory_window<M>(ui: &mut Ui, mem: &M)
-where
-    M: Index<usize, Output = u8>,
-{
+pub fn show_memory_window(ui: &mut Ui, mem: &Memory) {
     egui::Grid::new("memory_grid")
         .num_columns(3)
         .spacing([40.0, 4.0])
@@ -174,10 +171,7 @@ where
         });
 }
 
-fn dump_memory_row<M>(ui: &mut Ui, row: u16, mem: &M)
-where
-    M: Index<usize, Output = u8>,
-{
+fn dump_memory_row(ui: &mut Ui, row: u16, mem: &Memory) {
     ui.monospace(format!("{:08x}", row * 16));
     let mut hex_line = String::new();
     let mut ascii_line = String::new();
