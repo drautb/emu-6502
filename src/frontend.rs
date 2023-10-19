@@ -13,7 +13,8 @@ const STATUS_FLAG_CLEAR: Color32 = Color32::from_gray(64);
 const STATUS_FLAG_SET: Color32 = Color32::from_rgb(44, 108, 34);
 
 const MEMORY_ROWS: u16 = 20;
-const LAST_ROW: u16 = 0xFFFF - 0x10 * (MEMORY_ROWS - 1);
+const LAST_ROW_START_ADDRESS: u16 = 0xFFFF - 0x10 * (MEMORY_ROWS - 1);
+const LAST_ROW: u16 = LAST_ROW_START_ADDRESS / 0x10;
 
 #[derive(Default)]
 pub struct Frontend {
@@ -165,19 +166,25 @@ impl Frontend {
     pub fn show_memory_window(&mut self, ui: &mut Ui, mem: &Memory) {
         let table = TableBuilder::new(ui)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-            .column(Column::exact(180.0))
-            .column(Column::exact(180.0))
-            .column(Column::exact(180.0));
+            .column(Column::exact(125.0))
+            .column(Column::exact(290.0))
+            .column(Column::exact(125.0));
         table.body(|mut body| {
             body.row(30.0, |mut row| {
                 row.col(|_| {});
                 row.col(|ui| {
                     ui.horizontal(|ui| {
+                        if ui.button("⏮").clicked() {
+                            self.memory_offset = 0;
+                        }
                         if ui.button("⏪").clicked() {
                             self.memory_offset -= cmp::min(0x100, self.memory_offset);
                         }
                         if ui.button("◀").clicked() {
                             self.memory_offset -= cmp::min(0x10, self.memory_offset);
+                        }
+                        if ui.button("-1").clicked() {
+                            self.memory_offset -= cmp::min(0x1, self.memory_offset);
                         }
                         ui.monospace("0x");
 
@@ -194,11 +201,17 @@ impl Frontend {
                                 _ => self.memory_offset,
                             };
 
+                        if ui.button("+1").clicked() {
+                            self.memory_offset += cmp::min(0x1, 0xFFFF - self.memory_offset);
+                        }
                         if ui.button("▶").clicked() {
                             self.memory_offset += cmp::min(0x10, 0xFFFF - self.memory_offset);
                         }
                         if ui.button("⏩").clicked() {
                             self.memory_offset += cmp::min(0x100, 0xFFFF - self.memory_offset);
+                        }
+                        if ui.button("⏭").clicked() {
+                            self.memory_offset = 0xFFFF;
                         }
                     });
                 });
@@ -210,10 +223,25 @@ impl Frontend {
 
         egui::Grid::new("memory_grid")
             .num_columns(3)
-            .spacing([20.0, 6.0])
+            .spacing([20.0, 4.0])
             .striped(true)
             .show(ui, |ui| {
-                let start_row = cmp::min(self.memory_offset, LAST_ROW) / 0x10;
+                ui.monospace("");
+                ui.horizontal(|ui| {
+                    for b in 0..16 {
+                        ui.label(
+                            egui::RichText::new(format!("{:02X}", b).as_str())
+                                .strong()
+                                .monospace(),
+                        );
+                        if b == 7 {
+                            ui.monospace(' '.to_string());
+                        }
+                    }
+                });
+                ui.monospace("");
+                ui.end_row();
+                let start_row = self.compute_start_row();
                 for r in start_row..start_row + MEMORY_ROWS {
                     self.dump_memory_row(ui, r, mem);
                 }
@@ -221,27 +249,78 @@ impl Frontend {
     }
 
     fn dump_memory_row(&self, ui: &mut Ui, row: u16, mem: &Memory) {
-        ui.monospace(format!("{:04X}", row * 16));
-        let mut hex_line = String::new();
-        let mut ascii_line = String::new();
-        ascii_line.push('|');
-        for b in 0..16 {
-            let byte: u8 = mem[((row * 16) + b) as usize];
-            hex_line.push_str(format!("{:02X} ", byte).as_str());
-            if b == 7 {
-                hex_line.push(' ');
-            }
-            let c: char = byte as char;
-            if c.is_ascii_control() {
-                ascii_line.push('.');
-            } else {
-                ascii_line.push(c);
-            }
-        }
-        ascii_line.push('|');
+        ui.label(
+            egui::RichText::new(format!("{:04X}", row * 16))
+                .strong()
+                .monospace(),
+        );
 
-        ui.monospace(hex_line);
-        ui.monospace(ascii_line);
+        let mut ascii_str = String::new();
+        ui.horizontal(|ui| {
+            for b in 0..16 {
+                let addr = (row * 16) + b;
+                let byte: u8 = mem[addr as usize];
+                let mut text = egui::RichText::new(format!("{:02X}", byte).as_str()).monospace();
+                if addr == self.memory_offset {
+                    text = text.color(Color32::GOLD);
+                }
+                ui.monospace(text);
+                if b == 7 {
+                    ui.monospace(' '.to_string());
+                }
+
+                let c: char = byte as char;
+                if c.is_ascii_control() {
+                    ascii_str.push('.');
+                } else {
+                    ascii_str.push(c);
+                }
+            }
+        });
+
+        ui.monospace(ascii_str);
         ui.end_row();
+    }
+
+    fn compute_start_row(&self) -> u16 {
+        let start_row = (self.memory_offset - cmp::min(self.memory_offset, 0x90)) / 0x10;
+        cmp::min(start_row, LAST_ROW)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compute_start_row() {
+        let mut frontend = Frontend::default();
+
+        frontend.memory_offset = 0;
+        assert_eq!(frontend.compute_start_row(), 0);
+
+        frontend.memory_offset = 0x90;
+        assert_eq!(frontend.compute_start_row(), 0);
+
+        frontend.memory_offset = 0xA0;
+        assert_eq!(frontend.compute_start_row(), 1);
+
+        frontend.memory_offset = 0xF0;
+        assert_eq!(frontend.compute_start_row(), 6);
+
+        frontend.memory_offset = 0xFE30;
+        assert_eq!(frontend.compute_start_row(), 4058);
+
+        frontend.memory_offset = 0xFE40;
+        assert_eq!(frontend.compute_start_row(), 4059);
+
+        frontend.memory_offset = 0xFF40;
+        assert_eq!(frontend.compute_start_row(), 4075);
+
+        frontend.memory_offset = 0xFF50;
+        assert_eq!(frontend.compute_start_row(), 4076);
+
+        frontend.memory_offset = 0xFFFF;
+        assert_eq!(frontend.compute_start_row(), 4076);
     }
 }
