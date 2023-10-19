@@ -18,8 +18,14 @@ const LAST_ROW: u16 = LAST_ROW_START_ADDRESS / 0x10;
 
 #[derive(Default)]
 pub struct Frontend {
+    // The emulator
     emulator: Emulator,
-    memory_offset: u16,
+
+    // Selected memory cell in viewer
+    selected_memory: u16,
+
+    // Where binary originates in memory (start address)
+    binary_orig: u16,
 }
 
 impl eframe::App for Frontend {
@@ -166,56 +172,80 @@ impl Frontend {
     pub fn show_memory_window(&mut self, ui: &mut Ui, mem: &Memory) {
         let table = TableBuilder::new(ui)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-            .column(Column::exact(125.0))
-            .column(Column::exact(290.0))
-            .column(Column::exact(125.0));
+            .column(Column::auto())
+            .column(Column::exact(100.0))
+            .column(Column::auto());
         table.body(|mut body| {
             body.row(30.0, |mut row| {
+                row.col(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Orig:");
+
+                        let mut binary_orig_str = format!("{:X}", self.binary_orig);
+                        ui.add(
+                            TextEdit::singleline(&mut binary_orig_str)
+                                .desired_width(40.0)
+                                .char_limit(4)
+                                .clip_text(false),
+                        );
+                        self.binary_orig = match u16::from_str_radix(binary_orig_str.as_str(), 16) {
+                            Ok(val) => val,
+                            _ => self.selected_memory,
+                        };
+
+                        if ui.button("Load Binary").clicked() {
+                            if let Some(path) = rfd::FileDialog::new().pick_file() {
+                                self.emulator.load_binary(path, self.binary_orig.into());
+                            }
+                        }
+                    });
+                });
+
                 row.col(|_| {});
+
                 row.col(|ui| {
                     ui.horizontal(|ui| {
                         if ui.button("⏮").clicked() {
-                            self.memory_offset = 0;
+                            self.selected_memory = 0;
                         }
                         if ui.button("⏪").clicked() {
-                            self.memory_offset -= cmp::min(0x100, self.memory_offset);
+                            self.selected_memory -= cmp::min(0x100, self.selected_memory);
                         }
                         if ui.button("◀").clicked() {
-                            self.memory_offset -= cmp::min(0x10, self.memory_offset);
+                            self.selected_memory -= cmp::min(0x10, self.selected_memory);
                         }
                         if ui.button("-1").clicked() {
-                            self.memory_offset -= cmp::min(0x1, self.memory_offset);
+                            self.selected_memory -= cmp::min(0x1, self.selected_memory);
                         }
                         ui.monospace("0x");
 
-                        let mut memory_offset_str = format!("{:X}", self.memory_offset);
+                        let mut memory_offset_str = format!("{:X}", self.selected_memory);
                         ui.add(
                             TextEdit::singleline(&mut memory_offset_str)
                                 .desired_width(40.0)
                                 .char_limit(4)
                                 .clip_text(false),
                         );
-                        self.memory_offset =
+                        self.selected_memory =
                             match u16::from_str_radix(memory_offset_str.as_str(), 16) {
                                 Ok(val) => val,
-                                _ => self.memory_offset,
+                                _ => self.selected_memory,
                             };
 
                         if ui.button("+1").clicked() {
-                            self.memory_offset += cmp::min(0x1, 0xFFFF - self.memory_offset);
+                            self.selected_memory += cmp::min(0x1, 0xFFFF - self.selected_memory);
                         }
                         if ui.button("▶").clicked() {
-                            self.memory_offset += cmp::min(0x10, 0xFFFF - self.memory_offset);
+                            self.selected_memory += cmp::min(0x10, 0xFFFF - self.selected_memory);
                         }
                         if ui.button("⏩").clicked() {
-                            self.memory_offset += cmp::min(0x100, 0xFFFF - self.memory_offset);
+                            self.selected_memory += cmp::min(0x100, 0xFFFF - self.selected_memory);
                         }
                         if ui.button("⏭").clicked() {
-                            self.memory_offset = 0xFFFF;
+                            self.selected_memory = 0xFFFF;
                         }
                     });
                 });
-                row.col(|_| {});
             });
         });
 
@@ -263,7 +293,7 @@ impl Frontend {
                 let mut text = egui::RichText::new(format!("{:02X}", byte).as_str()).monospace();
 
                 // Highlight the currently selected memory location as well as the stack and other well-known locations.
-                if addr == self.memory_offset {
+                if addr == self.selected_memory {
                     text = text.color(Color32::GOLD);
                 } else if addr >> 8 == 0x01 {
                     text = text.color(Color32::LIGHT_YELLOW);
@@ -279,7 +309,7 @@ impl Frontend {
                     .add(egui::Label::new(text).sense(egui::Sense::click()))
                     .clicked()
                 {
-                    self.memory_offset = addr;
+                    self.selected_memory = addr;
                 }
 
                 if b == 7 {
@@ -300,7 +330,7 @@ impl Frontend {
     }
 
     fn compute_start_row(&self) -> u16 {
-        let start_row = (self.memory_offset - cmp::min(self.memory_offset, 0x90)) / 0x10;
+        let start_row = (self.selected_memory - cmp::min(self.selected_memory, 0x90)) / 0x10;
         cmp::min(start_row, LAST_ROW)
     }
 }
@@ -313,31 +343,31 @@ mod tests {
     fn compute_start_row() {
         let mut frontend = Frontend::default();
 
-        frontend.memory_offset = 0;
+        frontend.selected_memory = 0;
         assert_eq!(frontend.compute_start_row(), 0);
 
-        frontend.memory_offset = 0x90;
+        frontend.selected_memory = 0x90;
         assert_eq!(frontend.compute_start_row(), 0);
 
-        frontend.memory_offset = 0xA0;
+        frontend.selected_memory = 0xA0;
         assert_eq!(frontend.compute_start_row(), 1);
 
-        frontend.memory_offset = 0xF0;
+        frontend.selected_memory = 0xF0;
         assert_eq!(frontend.compute_start_row(), 6);
 
-        frontend.memory_offset = 0xFE30;
+        frontend.selected_memory = 0xFE30;
         assert_eq!(frontend.compute_start_row(), 4058);
 
-        frontend.memory_offset = 0xFE40;
+        frontend.selected_memory = 0xFE40;
         assert_eq!(frontend.compute_start_row(), 4059);
 
-        frontend.memory_offset = 0xFF40;
+        frontend.selected_memory = 0xFF40;
         assert_eq!(frontend.compute_start_row(), 4075);
 
-        frontend.memory_offset = 0xFF50;
+        frontend.selected_memory = 0xFF50;
         assert_eq!(frontend.compute_start_row(), 4076);
 
-        frontend.memory_offset = 0xFFFF;
+        frontend.selected_memory = 0xFFFF;
         assert_eq!(frontend.compute_start_row(), 4076);
     }
 }

@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
+use std::path::PathBuf;
 
 use crate::cpu::Cpu;
 use crate::Memory;
@@ -35,7 +36,7 @@ impl Emulator {
     /**
      * Load a binary into memory, starting at the given start address.
      */
-    pub fn load_binary(&mut self, filepath: String, start_address: usize) {
+    pub fn load_binary(&mut self, filepath: PathBuf, start_address: usize) {
         let file = BufReader::new(File::open(filepath).expect("Failed to open file!"));
         for (idx, byte_result) in file.bytes().enumerate() {
             if let Result::Ok(byte) = byte_result {
@@ -53,7 +54,7 @@ mod tests {
     fn load_binary() {
         let mut emulator = Emulator::new();
 
-        emulator.load_binary("test_programs/blink.out".to_string(), 0x200);
+        emulator.load_binary(PathBuf::from("test_programs/blink.out"), 0x200);
 
         assert_eq!(emulator.memory()[0x200], 0xA9);
         assert_eq!(emulator.memory()[0x201], 0xFF);
