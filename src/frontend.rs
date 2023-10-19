@@ -248,7 +248,7 @@ impl Frontend {
             });
     }
 
-    fn dump_memory_row(&self, ui: &mut Ui, row: u16, mem: &Memory) {
+    fn dump_memory_row(&mut self, ui: &mut Ui, row: u16, mem: &Memory) {
         ui.label(
             egui::RichText::new(format!("{:04X}", row * 16))
                 .strong()
@@ -275,7 +275,13 @@ impl Frontend {
                     text = text.color(Color32::LIGHT_BLUE);
                 }
 
-                ui.monospace(text);
+                if ui
+                    .add(egui::Label::new(text).sense(egui::Sense::click()))
+                    .clicked()
+                {
+                    self.memory_offset = addr;
+                }
+
                 if b == 7 {
                     ui.monospace(' '.to_string());
                 }
