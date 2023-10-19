@@ -12,6 +12,9 @@ const STATUS_FLAG_SIZE: Vec2 = Vec2::new(26.0, 26.0);
 const STATUS_FLAG_CLEAR: Color32 = Color32::from_gray(64);
 const STATUS_FLAG_SET: Color32 = Color32::from_rgb(44, 108, 34);
 
+const MEMORY_ROWS: u16 = 20;
+const LAST_ROW: u16 = 0xFFFF - 0x10 * (MEMORY_ROWS - 1);
+
 #[derive(Default)]
 pub struct Frontend {
     emulator: Emulator,
@@ -162,11 +165,11 @@ impl Frontend {
     pub fn show_memory_window(&mut self, ui: &mut Ui, mem: &Memory) {
         let table = TableBuilder::new(ui)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-            .column(Column::exact(210.0))
             .column(Column::exact(180.0))
-            .column(Column::exact(210.0));
+            .column(Column::exact(180.0))
+            .column(Column::exact(180.0));
         table.body(|mut body| {
-            body.row(24.0, |mut row| {
+            body.row(30.0, |mut row| {
                 row.col(|_| {});
                 row.col(|ui| {
                     ui.horizontal(|ui| {
@@ -207,18 +210,18 @@ impl Frontend {
 
         egui::Grid::new("memory_grid")
             .num_columns(3)
-            .spacing([40.0, 4.0])
+            .spacing([20.0, 6.0])
             .striped(true)
             .show(ui, |ui| {
-                let start_row = self.memory_offset / 0x10;
-                for r in start_row..start_row + 20 {
+                let start_row = cmp::min(self.memory_offset, LAST_ROW) / 0x10;
+                for r in start_row..start_row + MEMORY_ROWS {
                     self.dump_memory_row(ui, r, mem);
                 }
             });
     }
 
     fn dump_memory_row(&self, ui: &mut Ui, row: u16, mem: &Memory) {
-        ui.monospace(format!("{:08X}", row * 16));
+        ui.monospace(format!("{:04X}", row * 16));
         let mut hex_line = String::new();
         let mut ascii_line = String::new();
         ascii_line.push('|');
