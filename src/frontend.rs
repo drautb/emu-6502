@@ -261,9 +261,20 @@ impl Frontend {
                 let addr = (row * 16) + b;
                 let byte: u8 = mem[addr as usize];
                 let mut text = egui::RichText::new(format!("{:02X}", byte).as_str()).monospace();
+
+                // Highlight the currently selected memory location as well as the stack and other well-known locations.
                 if addr == self.memory_offset {
                     text = text.color(Color32::GOLD);
+                } else if addr >> 8 == 0x01 {
+                    text = text.color(Color32::LIGHT_YELLOW);
+                } else if addr == 0xFFFA || addr == 0xFFFB {
+                    text = text.color(Color32::LIGHT_RED);
+                } else if addr == 0xFFFC || addr == 0xFFFD {
+                    text = text.color(Color32::LIGHT_GREEN);
+                } else if addr == 0xFFFE || addr == 0xFFFF {
+                    text = text.color(Color32::LIGHT_BLUE);
                 }
+
                 ui.monospace(text);
                 if b == 7 {
                     ui.monospace(' '.to_string());
