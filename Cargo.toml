@@ -8,4 +8,3 @@ edition = "2021"
 [dependencies]
 eframe = "0.23.0"
 egui_extras = "0.23.0"
-memmap = "0.7.0"
