@@ -1,8 +1,6 @@
 use std::cmp;
 
-use crate::cpu::Cpu;
 use crate::emulator::Emulator;
-use crate::Memory;
 use eframe::egui::{self, TextEdit};
 use eframe::egui::{Button, Ui, Vec2};
 use eframe::epaint::Color32;
@@ -36,7 +34,7 @@ impl eframe::App for Frontend {
                 .open(&mut open)
                 .fixed_size(Vec2::new(200.0, 1.0))
                 .show(ctx, |ui| {
-                    self.show_cpu_window(ui, &self.emulator.cpu());
+                    self.show_cpu_window(ui);
                 });
         });
 
@@ -46,14 +44,18 @@ impl eframe::App for Frontend {
                 .open(&mut open)
                 .fixed_size(Vec2::new(200.0, 1.0))
                 .show(ctx, |ui| {
-                    self.show_memory_window(ui, &self.emulator.memory());
+                    self.show_memory_window(ui);
                 });
         });
     }
 }
 
 impl Frontend {
-    pub fn show_cpu_window(&self, ui: &mut Ui, cpu: &Cpu) {
+    pub fn show_cpu_window(&mut self, ui: &mut Ui) {
+        self.show_cpu_controls(ui);
+
+        ui.separator();
+
         ui.heading("Registers");
 
         let table = egui_extras::TableBuilder::new(ui)
@@ -83,6 +85,7 @@ impl Frontend {
             });
         });
 
+        let cpu = self.emulator.cpu();
         table.body(|mut body| {
             body.row(18.0, |mut row| {
                 row.col(|ui| {
@@ -138,6 +141,42 @@ impl Frontend {
         });
     }
 
+    fn show_cpu_controls(&mut self, ui: &mut Ui) {
+        egui::Grid::new("memory_grid")
+            .num_columns(3)
+            .spacing([100.0, 24.0])
+            .striped(true)
+            .show(ui, |ui| {
+                ui.label("");
+
+                ui.horizontal(|ui| {
+                    if ui.button("🔃").on_hover_text("Reset").clicked() {
+                        self.emulator.reset_cpu();
+                    };
+
+                    if ui
+                        .button("Load")
+                        .on_hover_text("Load Next Instruction")
+                        .clicked()
+                    {};
+
+                    if ui
+                        .button("Exec")
+                        .on_hover_text("Execute Loaded Instruction")
+                        .clicked()
+                    {};
+
+                    if ui
+                        .button("Load & Exec")
+                        .on_hover_text("Load And Execute Next Instruction")
+                        .clicked()
+                    {};
+                });
+
+                ui.label("");
+            });
+    }
+
     fn show_register(&self, body: &mut egui_extras::TableBody, label: &str, abbrev: &str, val: u8) {
         body.row(18.0, |mut row| {
             row.col(|ui| {
@@ -169,7 +208,7 @@ impl Frontend {
         );
     }
 
-    pub fn show_memory_window(&mut self, ui: &mut Ui, mem: &Memory) {
+    pub fn show_memory_window(&mut self, ui: &mut Ui) {
         let table = TableBuilder::new(ui)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
             .column(Column::auto())
@@ -273,18 +312,19 @@ impl Frontend {
                 ui.end_row();
                 let start_row = self.compute_start_row();
                 for r in start_row..start_row + MEMORY_ROWS {
-                    self.dump_memory_row(ui, r, mem);
+                    self.dump_memory_row(ui, r);
                 }
             });
     }
 
-    fn dump_memory_row(&mut self, ui: &mut Ui, row: u16, mem: &Memory) {
+    fn dump_memory_row(&mut self, ui: &mut Ui, row: u16) {
         ui.label(
             egui::RichText::new(format!("{:04X}", row * 16))
                 .strong()
                 .monospace(),
         );
 
+        let mem = self.emulator.memory();
         let mut ascii_str = String::new();
         ui.horizontal(|ui| {
             for b in 0..16 {

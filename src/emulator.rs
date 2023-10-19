@@ -25,12 +25,16 @@ impl Emulator {
         }
     }
 
-    pub fn cpu(&self) -> Cpu {
-        self.cpu
+    pub fn cpu(&self) -> &Cpu {
+        &self.cpu
     }
 
-    pub fn memory(&self) -> Memory {
-        self.memory
+    pub fn memory(&self) -> &Memory {
+        &self.memory
+    }
+
+    pub fn reset_cpu(&mut self) {
+        self.cpu.reset(&self.memory);
     }
 
     /**

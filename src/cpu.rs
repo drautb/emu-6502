@@ -435,7 +435,7 @@ fn sub_wrap(n1: u8, n2: u8) -> u8 {
     (Wrapping(n1) - Wrapping(n2)).0
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(PartialEq)]
 pub struct Cpu {
     ir: u8, // instruction register
     a: u8,  // accumulator
