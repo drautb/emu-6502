@@ -1,4 +1,6 @@
 use std::cmp;
+use std::thread::sleep;
+use std::time::Duration;
 
 use crate::cpu::parse_instruction;
 use crate::emulator::Emulator;
@@ -31,10 +33,19 @@ pub struct Frontend {
 
     // PC override string
     pc_override: String,
+
+    // Run continuously or in single step mode
+    continuous: bool,
 }
 
 impl eframe::App for Frontend {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.continuous {
+            sleep(Duration::from_millis(100));
+            self.emulator.step_cpu();
+            self.selected_memory = self.emulator.cpu().program_counter() as u16;
+        }
+
         egui::CentralPanel::default().show(ctx, |_ui| {
             let mut open = true;
             egui::Window::new("CPU")
@@ -160,6 +171,18 @@ impl Frontend {
                 body.row(30.0, |mut row| {
                     row.col(|ui| {
                         ui.horizontal(|ui| {
+                            if ui.button("▶").on_hover_text("Run continuously").clicked() {
+                                self.continuous = true;
+                            }
+
+                            if ui
+                                .button("⏸")
+                                .on_hover_text("Pause for single steps")
+                                .clicked()
+                            {
+                                self.continuous = false;
+                            }
+
                             if ui
                                 .button("Step")
                                 .on_hover_text("Execute next instruction")
