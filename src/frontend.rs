@@ -24,6 +24,9 @@ pub struct Frontend {
 
     // Where binary originates in memory (start address)
     binary_orig: u16,
+
+    // True if the next instruction is loaded into the IR, but hasn't executed yet.
+    instruction_loaded: bool,
 }
 
 impl eframe::App for Frontend {
@@ -113,12 +116,12 @@ impl Frontend {
                 });
             });
 
-            self.show_register(
-                &mut body,
-                "Instruction Register",
-                "ir",
-                cpu.instruction_register(),
-            );
+            let mut ir_label = String::new();
+            if self.instruction_loaded {
+                ir_label.push('*');
+            }
+            ir_label.push_str("Instruction Register");
+            self.show_register(&mut body, &ir_label, "ir", cpu.instruction_register());
             self.show_register(&mut body, "Accumulator", "a", cpu.accumulator());
             self.show_register(&mut body, "X", "x", cpu.x_register());
             self.show_register(&mut body, "Y", "y", cpu.y_register());
@@ -152,6 +155,7 @@ impl Frontend {
                 ui.horizontal(|ui| {
                     if ui.button("🔃").on_hover_text("Reset").clicked() {
                         self.emulator.reset_cpu();
+                        self.instruction_loaded = false;
                     };
 
                     if ui
@@ -160,6 +164,7 @@ impl Frontend {
                         .clicked()
                     {
                         self.emulator.load_next_instruction();
+                        self.instruction_loaded = true;
                     };
 
                     if ui
@@ -168,6 +173,7 @@ impl Frontend {
                         .clicked()
                     {
                         self.emulator.step_cpu();
+                        self.instruction_loaded = false;
                     };
                 });
 
