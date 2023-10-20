@@ -37,6 +37,14 @@ impl Emulator {
         self.cpu.reset(&self.memory);
     }
 
+    pub fn load_next_instruction(&mut self) {
+        self.cpu.load_instruction(&self.memory);
+    }
+
+    pub fn step_cpu(&mut self) {
+        self.cpu.step(&mut self.memory);
+    }
+
     /**
      * Load a binary into memory, starting at the given start address.
      */

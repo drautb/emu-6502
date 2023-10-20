@@ -156,21 +156,19 @@ impl Frontend {
 
                     if ui
                         .button("Load")
-                        .on_hover_text("Load Next Instruction")
+                        .on_hover_text("Load next instruction")
                         .clicked()
-                    {};
+                    {
+                        self.emulator.load_next_instruction();
+                    };
 
                     if ui
-                        .button("Exec")
-                        .on_hover_text("Execute Loaded Instruction")
+                        .button("Step")
+                        .on_hover_text("Execute next instruction")
                         .clicked()
-                    {};
-
-                    if ui
-                        .button("Load & Exec")
-                        .on_hover_text("Load And Execute Next Instruction")
-                        .clicked()
-                    {};
+                    {
+                        self.emulator.step_cpu();
+                    };
                 });
 
                 ui.label("");
@@ -345,6 +343,10 @@ impl Frontend {
                     text = text.color(Color32::LIGHT_BLUE);
                 }
 
+                if addr as usize == self.emulator.cpu().program_counter() {
+                    text = text.background_color(Color32::DARK_GREEN);
+                }
+
                 if ui
                     .add(egui::Label::new(text).sense(egui::Sense::click()))
                     .clicked()
@@ -357,10 +359,10 @@ impl Frontend {
                 }
 
                 let c: char = byte as char;
-                if c.is_ascii_control() {
-                    ascii_str.push('.');
-                } else {
+                if (0x20..=0x7E).contains(&byte) {
                     ascii_str.push(c);
+                } else {
+                    ascii_str.push('.');
                 }
             }
         });

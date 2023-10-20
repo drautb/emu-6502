@@ -141,7 +141,7 @@ enum Instruction {
     WAI(u8), // WAit for Interrupt
 }
 
-fn load_instruction(opcode: u8) -> Instruction {
+fn parse_instruction(opcode: u8) -> Instruction {
     match opcode {
         0x69 => Instruction::ADC(opcode, AddressMode::IMMEDIATE),
         0x6D => Instruction::ADC(opcode, AddressMode::ABS),
@@ -536,10 +536,13 @@ impl Cpu {
         self.s = 0xFF;
     }
 
+    pub fn load_instruction(&mut self, mem: &Memory) {
+        self.ir = mem[self.pc];
+    }
+
     pub fn step(&mut self, mem: &mut Memory) {
-        let opcode = mem[self.pc];
-        let instruction = load_instruction(opcode);
-        self.ir = opcode;
+        self.load_instruction(mem);
+        let instruction = parse_instruction(self.ir);
         match instruction {
             Instruction::ADC(_, address_mode) => {
                 let n1 = self.a;
