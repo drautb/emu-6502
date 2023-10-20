@@ -594,43 +594,41 @@ impl Cpu {
 
             Instruction::BBR(_, bit) => {
                 let test = mem[self.resolve_zp(mem)];
-                let offset = self.third_byte_operand(mem);
+                let offset = self.third_byte_operand(mem) as i8;
+                self.pc += 3;
                 if test & (1 << bit) == 0 {
-                    self.pc += offset as usize;
-                } else {
-                    self.pc += 3;
+                    self.update_pc_relative(offset);
                 }
             }
             Instruction::BBS(_, bit) => {
                 let test = mem[self.resolve_zp(mem)];
-                let offset = self.third_byte_operand(mem);
+                let offset = self.third_byte_operand(mem) as i8;
+                self.pc += 3;
                 if test & (1 << bit) > 0 {
-                    self.pc += offset as usize;
-                } else {
-                    self.pc += 3;
+                    self.update_pc_relative(offset);
                 }
             }
 
             Instruction::BCC(_) => {
-                self.pc += if self.p & PC_MASK == 0 {
-                    self.second_byte_operand(mem) as usize
-                } else {
-                    2
+                let offset = self.second_byte_operand(mem) as i8;
+                self.pc += 2;
+                if self.p & PC_MASK == 0 {
+                    self.update_pc_relative(offset);
                 }
             }
             Instruction::BCS(_) => {
-                self.pc += if self.p & PC_MASK > 0 {
-                    self.second_byte_operand(mem) as usize
-                } else {
-                    2
+                let offset = self.second_byte_operand(mem) as i8;
+                self.pc += 2;
+                if self.p & PC_MASK > 0 {
+                    self.update_pc_relative(offset);
                 }
             }
 
             Instruction::BEQ(_) => {
-                self.pc += if self.p & PZ_MASK > 0 {
-                    self.second_byte_operand(mem) as usize
-                } else {
-                    2
+                let offset = self.second_byte_operand(mem) as i8;
+                self.pc += 2;
+                if self.p & PZ_MASK > 0 {
+                    self.update_pc_relative(offset);
                 }
             }
 
@@ -642,29 +640,31 @@ impl Cpu {
             }
 
             Instruction::BMI(_) => {
-                self.pc += if self.p & PN_MASK > 0 {
-                    self.second_byte_operand(mem) as usize
-                } else {
-                    2
+                let offset = self.second_byte_operand(mem) as i8;
+                self.pc += 2;
+                if self.p & PN_MASK > 0 {
+                    self.update_pc_relative(offset);
                 }
             }
             Instruction::BNE(_) => {
                 let offset = self.second_byte_operand(mem) as i8;
                 self.pc += 2;
                 if self.p & PZ_MASK == 0 {
-                    self.pc = ((self.pc as i16) + offset as i16) as usize;
+                    self.update_pc_relative(offset);
                 }
             }
             Instruction::BPL(_) => {
-                self.pc += if self.p & PN_MASK == 0 {
-                    self.second_byte_operand(mem) as usize
-                } else {
-                    2
+                let offset = self.second_byte_operand(mem) as i8;
+                self.pc += 2;
+                if self.p & PN_MASK == 0 {
+                    self.update_pc_relative(offset);
                 }
             }
 
             Instruction::BRA(_) => {
-                self.pc += self.second_byte_operand(mem) as usize;
+                let offset = self.second_byte_operand(mem) as i8;
+                self.pc += 2;
+                self.update_pc_relative(offset);
             }
 
             Instruction::BRK(_) => {
@@ -683,17 +683,17 @@ impl Cpu {
             }
 
             Instruction::BVC(_) => {
-                self.pc += if self.p & PV_MASK == 0 {
-                    self.second_byte_operand(mem) as usize
-                } else {
-                    2
+                let offset = self.second_byte_operand(mem) as i8;
+                self.pc += 2;
+                if self.p & PV_MASK == 0 {
+                    self.update_pc_relative(offset);
                 }
             }
             Instruction::BVS(_) => {
-                self.pc += if self.p & PV_MASK > 0 {
-                    self.second_byte_operand(mem) as usize
-                } else {
-                    2
+                let offset = self.second_byte_operand(mem) as i8;
+                self.pc += 2;
+                if self.p & PV_MASK > 0 {
+                    self.update_pc_relative(offset);
                 }
             }
 
@@ -1156,6 +1156,10 @@ impl Cpu {
 
     fn update_pc(&mut self, address_mode: AddressMode) {
         self.pc += Cpu::instruction_length(address_mode);
+    }
+
+    fn update_pc_relative(&mut self, offset: i8) {
+        self.pc = ((self.pc as i16) + offset as i16) as usize;
     }
 
     fn incr_pc(&mut self) {
@@ -1696,10 +1700,10 @@ mod tests {
         }
 
         #[test]
-        fn bbr_branch() {
+        fn bbr_branch_forward() {
             for i in 0..8 {
                 let opcode = 0x0F + (i * 0x10);
-                let rom = vec![opcode, 0xCD, 0xBB];
+                let rom = vec![opcode, 0xCD, 5];
                 let (mut cpu, mut mem) = setup(rom);
                 mem[0x00CD] = 0x00;
 
@@ -1709,7 +1713,32 @@ mod tests {
                     cpu,
                     Cpu {
                         ir: opcode,
-                        pc: 0xBB,
+                        pc: 8,
+                        ..Cpu::new()
+                    }
+                )
+            }
+        }
+
+        #[test]
+        fn bbr_branch_backward() {
+            for i in 0..8 {
+                let opcode = 0x0F + (i * 0x10);
+                let rom = vec![
+                    0xEA, 0xEA, 0xEA, opcode, 0xCD, 0b11111011, // -5 in 2's comp
+                    0xEA,
+                ];
+                let (mut cpu, mut mem) = setup(rom);
+                cpu.pc = 3;
+                mem[0x00CD] = 0x00;
+
+                cpu.step(&mut mem);
+
+                assert_eq!(
+                    cpu,
+                    Cpu {
+                        ir: opcode,
+                        pc: 1,
                         ..Cpu::new()
                     }
                 )
@@ -1738,10 +1767,10 @@ mod tests {
         }
 
         #[test]
-        fn bbs_branch() {
+        fn bbs_branch_forward() {
             for i in 0..8 {
                 let opcode = 0x8F + (i * 0x10);
-                let rom = vec![opcode, 0xCD, 0xBB];
+                let rom = vec![opcode, 0xCD, 5];
                 let (mut cpu, mut mem) = setup(rom);
                 mem[0x00CD] = 0xFF;
 
@@ -1751,7 +1780,32 @@ mod tests {
                     cpu,
                     Cpu {
                         ir: opcode,
-                        pc: 0xBB,
+                        pc: 8,
+                        ..Cpu::new()
+                    }
+                )
+            }
+        }
+
+        #[test]
+        fn bbs_branch_backward() {
+            for i in 0..8 {
+                let opcode = 0x8F + (i * 0x10);
+                let rom = vec![
+                    0xEA, 0xEA, 0xEA, opcode, 0xCD, 0b11111011, // -5 in 2's comp
+                    0xEA,
+                ];
+                let (mut cpu, mut mem) = setup(rom);
+                cpu.pc = 3;
+                mem[0x00CD] = 0xFF;
+
+                cpu.step(&mut mem);
+
+                assert_eq!(
+                    cpu,
+                    Cpu {
+                        ir: opcode,
+                        pc: 1,
                         ..Cpu::new()
                     }
                 )
@@ -1777,8 +1831,8 @@ mod tests {
         }
 
         #[test]
-        fn bcc_branch() {
-            let (mut cpu, mut mem) = setup(vec![0x90, 0xCD]);
+        fn bcc_branch_forward() {
+            let (mut cpu, mut mem) = setup(vec![0x90, 5]);
 
             cpu.step(&mut mem);
 
@@ -1786,7 +1840,27 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0x90,
-                    pc: 0xCD,
+                    pc: 7,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bcc_branch_backward() {
+            let (mut cpu, mut mem) = setup(vec![
+                0xEA, 0xEA, 0xEA, 0x90, 0b11111100, // -4 in 2's comp
+                0xEA,
+            ]);
+            cpu.pc = 3;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x90,
+                    pc: 1,
                     ..Cpu::new()
                 }
             )
@@ -1809,8 +1883,8 @@ mod tests {
         }
 
         #[test]
-        fn bcs_branch() {
-            let (mut cpu, mut mem) = setup(vec![0xB0, 0xCD]);
+        fn bcs_branch_forward() {
+            let (mut cpu, mut mem) = setup(vec![0xB0, 5]);
             cpu.p = PC_MASK;
 
             cpu.step(&mut mem);
@@ -1819,7 +1893,29 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0xB0,
-                    pc: 0xCD,
+                    pc: 7,
+                    p: PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bcs_branch_backward() {
+            let (mut cpu, mut mem) = setup(vec![
+                0xEA, 0xEA, 0xEA, 0xB0, 0b11111100, // -4 in 2's comp
+                0xEA,
+            ]);
+            cpu.p = PC_MASK;
+            cpu.pc = 3;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xB0,
+                    pc: 1,
                     p: PC_MASK,
                     ..Cpu::new()
                 }
@@ -1843,8 +1939,8 @@ mod tests {
         }
 
         #[test]
-        fn beq_branch() {
-            let (mut cpu, mut mem) = setup(vec![0xF0, 0xCD]);
+        fn beq_branch_forward() {
+            let (mut cpu, mut mem) = setup(vec![0xF0, 5]);
             cpu.p = PZ_MASK;
 
             cpu.step(&mut mem);
@@ -1853,7 +1949,29 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0xF0,
-                    pc: 0xCD,
+                    pc: 7,
+                    p: PZ_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn beq_branch_backward() {
+            let (mut cpu, mut mem) = setup(vec![
+                0xEA, 0xEA, 0xEA, 0xF0, 0b11111100, // -4 in 2's comp
+                0xEA,
+            ]);
+            cpu.p = PZ_MASK;
+            cpu.pc = 3;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xF0,
+                    pc: 1,
                     p: PZ_MASK,
                     ..Cpu::new()
                 }
@@ -1877,8 +1995,8 @@ mod tests {
         }
 
         #[test]
-        fn bmi_branch() {
-            let (mut cpu, mut mem) = setup(vec![0x30, 0xCD]);
+        fn bmi_branch_forward() {
+            let (mut cpu, mut mem) = setup(vec![0x30, 5]);
             cpu.p = PN_MASK;
 
             cpu.step(&mut mem);
@@ -1887,7 +2005,29 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0x30,
-                    pc: 0xCD,
+                    pc: 7,
+                    p: PN_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bmi_branch_backward() {
+            let (mut cpu, mut mem) = setup(vec![
+                0xEA, 0xEA, 0xEA, 0x30, 0b11111100, // -4 in 2's comp
+                0xEA,
+            ]);
+            cpu.p = PN_MASK;
+            cpu.pc = 3;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x30,
+                    pc: 1,
                     p: PN_MASK,
                     ..Cpu::new()
                 }
@@ -1931,9 +2071,9 @@ mod tests {
         #[test]
         fn bne_branch_backward() {
             let (mut cpu, mut mem) = setup(vec![
-                0xEA, 0xEA, 0xEA,
-                0xD0, 0b11111100, // -4 in 2's complement
-                0xEA]);
+                0xEA, 0xEA, 0xEA, 0xD0, 0b11111100, // -4 in 2's complement
+                0xEA,
+            ]);
             cpu.pc = 3;
 
             cpu.step(&mut mem);
@@ -1967,8 +2107,8 @@ mod tests {
         }
 
         #[test]
-        fn bpl_branch() {
-            let (mut cpu, mut mem) = setup(vec![0x10, 0xCD]);
+        fn bpl_branch_forward() {
+            let (mut cpu, mut mem) = setup(vec![0x10, 5]);
 
             cpu.step(&mut mem);
 
@@ -1976,15 +2116,35 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0x10,
-                    pc: 0xCD,
+                    pc: 7,
                     ..Cpu::new()
                 }
             )
         }
 
         #[test]
-        fn bra_branch() {
-            let (mut cpu, mut mem) = setup(vec![0x80, 0xCD]);
+        fn bpl_branch_backward() {
+            let (mut cpu, mut mem) = setup(vec![
+                0xEA, 0xEA, 0xEA, 0x10, 0b11111100, // -4 in 2's comp
+                0xEA,
+            ]);
+            cpu.pc = 3;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x10,
+                    pc: 1,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bra_branch_forward() {
+            let (mut cpu, mut mem) = setup(vec![0x80, 5]);
 
             cpu.step(&mut mem);
 
@@ -1992,7 +2152,27 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0x80,
-                    pc: 0xCD,
+                    pc: 7,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bra_branch_backward() {
+            let (mut cpu, mut mem) = setup(vec![
+                0xEA, 0xEA, 0xEA, 0x80, 0b11111100, // -4 in 2's comp
+                0xEA,
+            ]);
+            cpu.pc = 3;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x80,
+                    pc: 1,
                     ..Cpu::new()
                 }
             )
@@ -2017,8 +2197,8 @@ mod tests {
         }
 
         #[test]
-        fn bvc_branch() {
-            let (mut cpu, mut mem) = setup(vec![0x50, 0xCD]);
+        fn bvc_branch_forward() {
+            let (mut cpu, mut mem) = setup(vec![0x50, 5]);
 
             cpu.step(&mut mem);
 
@@ -2026,7 +2206,27 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0x50,
-                    pc: 0xCD,
+                    pc: 7,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bvc_branch_backward() {
+            let (mut cpu, mut mem) = setup(vec![
+                0xEA, 0xEA, 0xEA, 0x50, 0b11111100, // -4 in 2's comp
+                0xEA,
+            ]);
+            cpu.pc = 3;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x50,
+                    pc: 1,
                     ..Cpu::new()
                 }
             )
@@ -2049,8 +2249,8 @@ mod tests {
         }
 
         #[test]
-        fn bvs_branch() {
-            let (mut cpu, mut mem) = setup(vec![0x70, 0xCD]);
+        fn bvs_branch_forward() {
+            let (mut cpu, mut mem) = setup(vec![0x70, 5]);
             cpu.p = PV_MASK;
 
             cpu.step(&mut mem);
@@ -2059,7 +2259,29 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0x70,
-                    pc: 0xCD,
+                    pc: 7,
+                    p: PV_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bvs_branch_backward() {
+            let (mut cpu, mut mem) = setup(vec![
+                0xEA, 0xEA, 0xEA, 0x70, 0b11111100, // -4 in 2's comp
+                0xEA,
+            ]);
+            cpu.pc = 3;
+            cpu.p = PV_MASK;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x70,
+                    pc: 1,
                     p: PV_MASK,
                     ..Cpu::new()
                 }
