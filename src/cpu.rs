@@ -962,6 +962,10 @@ impl Cpu {
         self.pc
     }
 
+    pub fn override_program_counter(&mut self, new_pc: usize) {
+        self.pc = new_pc
+    }
+
     pub fn instruction_register(&self) -> u8 {
         self.ir
     }

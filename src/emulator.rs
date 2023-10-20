@@ -45,6 +45,10 @@ impl Emulator {
         self.cpu.step(&mut self.memory);
     }
 
+    pub fn override_program_counter(&mut self, new_pc: usize) {
+        self.cpu.override_program_counter(new_pc);
+    }
+
     /**
      * Load a binary into memory, starting at the given start address.
      */

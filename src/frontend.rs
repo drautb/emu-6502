@@ -28,6 +28,9 @@ pub struct Frontend {
 
     // True if the next instruction is loaded into the IR, but hasn't executed yet.
     instruction_loaded: bool,
+
+    // PC override string
+    pc_override: String,
 }
 
 impl eframe::App for Frontend {
@@ -151,8 +154,8 @@ impl Frontend {
             let table = TableBuilder::new(ui)
                 .cell_layout(egui::Layout::right_to_left(egui::Align::Center))
                 .column(Column::auto())
-                .column(Column::auto())
-                .column(Column::auto().at_least(350.0));
+                .column(Column::auto().at_least(175.0))
+                .column(Column::auto().at_least(175.0));
             table.body(|mut body| {
                 body.row(30.0, |mut row| {
                     row.col(|ui| {
@@ -182,7 +185,28 @@ impl Frontend {
                         });
                     });
 
-                    row.col(|_ui| {});
+                    row.col(|ui| {
+                        ui.horizontal(|ui| {
+                            let pc_override =
+                                match usize::from_str_radix(self.pc_override.as_str(), 16) {
+                                    Ok(val) => val,
+                                    _ => 0,
+                                };
+
+                            if ui.button("Override PC").clicked() {
+                                self.emulator.override_program_counter(pc_override);
+                            }
+
+                            ui.add(
+                                TextEdit::singleline(&mut self.pc_override)
+                                    .desired_width(40.0)
+                                    .char_limit(4)
+                                    .clip_text(false),
+                            );
+                            ui.monospace("0x");
+                        });
+                    });
+
                     row.col(|ui| {
                         ui.monospace(self.hover_text(self.emulator.cpu().instruction_register()));
                     });
