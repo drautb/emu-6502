@@ -251,7 +251,7 @@ impl Frontend {
         let table = TableBuilder::new(ui)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
             .column(Column::auto())
-            .column(Column::exact(100.0))
+            .column(Column::exact(50.0))
             .column(Column::auto());
         table.body(|mut body| {
             body.row(30.0, |mut row| {
@@ -321,6 +321,12 @@ impl Frontend {
                         }
                         if ui.button("⏭").clicked() {
                             self.selected_memory = 0xFFFF;
+                        }
+
+                        ui.separator();
+
+                        if ui.button("PC").clicked() {
+                            self.selected_memory = self.emulator.cpu().program_counter() as u16;
                         }
                     });
                 });
