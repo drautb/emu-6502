@@ -649,10 +649,10 @@ impl Cpu {
                 }
             }
             Instruction::BNE(_) => {
-                self.pc += if self.p & PZ_MASK == 0 {
-                    self.second_byte_operand(mem) as usize
-                } else {
-                    2
+                let offset = self.second_byte_operand(mem) as i8;
+                self.pc += 2;
+                if self.p & PZ_MASK == 0 {
+                    self.pc = ((self.pc as i16) + offset as i16) as usize;
                 }
             }
             Instruction::BPL(_) => {
@@ -1913,8 +1913,8 @@ mod tests {
         }
 
         #[test]
-        fn bne_branch() {
-            let (mut cpu, mut mem) = setup(vec![0xD0, 0xCD]);
+        fn bne_branch_foward() {
+            let (mut cpu, mut mem) = setup(vec![0xD0, 5]);
 
             cpu.step(&mut mem);
 
@@ -1922,7 +1922,27 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0xD0,
-                    pc: 0xCD,
+                    pc: 7,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn bne_branch_backward() {
+            let (mut cpu, mut mem) = setup(vec![
+                0xEA, 0xEA, 0xEA,
+                0xD0, 0b11111100, // -4 in 2's complement
+                0xEA]);
+            cpu.pc = 3;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xD0,
+                    pc: 1,
                     ..Cpu::new()
                 }
             )
