@@ -1,5 +1,6 @@
 use std::cmp;
 
+use crate::cpu::parse_instruction;
 use crate::emulator::Emulator;
 use eframe::egui::{self, TextEdit};
 use eframe::egui::{Button, Ui, Vec2};
@@ -121,6 +122,7 @@ impl Frontend {
                 ir_label.push('*');
             }
             ir_label.push_str("Instruction Register");
+
             self.show_register(&mut body, &ir_label, "ir", cpu.instruction_register());
             self.show_register(&mut body, "Accumulator", "a", cpu.accumulator());
             self.show_register(&mut body, "X", "x", cpu.x_register());
@@ -145,40 +147,48 @@ impl Frontend {
     }
 
     fn show_cpu_controls(&mut self, ui: &mut Ui) {
-        egui::Grid::new("memory_grid")
-            .num_columns(3)
-            .spacing([100.0, 24.0])
-            .striped(true)
-            .show(ui, |ui| {
-                ui.label("");
+        ui.push_id(1, |ui| {
+            let table = TableBuilder::new(ui)
+                .cell_layout(egui::Layout::right_to_left(egui::Align::Center))
+                .column(Column::auto())
+                .column(Column::auto())
+                .column(Column::auto().at_least(350.0));
+            table.body(|mut body| {
+                body.row(30.0, |mut row| {
+                    row.col(|ui| {
+                        ui.horizontal(|ui| {
+                            if ui
+                                .button("Step")
+                                .on_hover_text("Execute next instruction")
+                                .clicked()
+                            {
+                                self.emulator.step_cpu();
+                                self.instruction_loaded = false;
+                            };
 
-                ui.horizontal(|ui| {
-                    if ui.button("🔃").on_hover_text("Reset").clicked() {
-                        self.emulator.reset_cpu();
-                        self.instruction_loaded = false;
-                    };
+                            if ui
+                                .button("Load")
+                                .on_hover_text("Load next instruction")
+                                .clicked()
+                            {
+                                self.emulator.load_next_instruction();
+                                self.instruction_loaded = true;
+                            };
 
-                    if ui
-                        .button("Load")
-                        .on_hover_text("Load next instruction")
-                        .clicked()
-                    {
-                        self.emulator.load_next_instruction();
-                        self.instruction_loaded = true;
-                    };
+                            if ui.button("🔃").on_hover_text("Reset").clicked() {
+                                self.emulator.reset_cpu();
+                                self.instruction_loaded = false;
+                            };
+                        });
+                    });
 
-                    if ui
-                        .button("Step")
-                        .on_hover_text("Execute next instruction")
-                        .clicked()
-                    {
-                        self.emulator.step_cpu();
-                        self.instruction_loaded = false;
-                    };
+                    row.col(|_ui| {});
+                    row.col(|ui| {
+                        ui.monospace(self.hover_text(self.emulator.cpu().instruction_register()));
+                    });
                 });
-
-                ui.label("");
             });
+        });
     }
 
     fn show_register(&self, body: &mut egui_extras::TableBody, label: &str, abbrev: &str, val: u8) {
@@ -190,7 +200,8 @@ impl Frontend {
                 ui.monospace(abbrev);
             });
             row.col(|ui| {
-                ui.monospace(format!("{:#04X}", val));
+                ui.monospace(format!("{:#04X}", val))
+                    .on_hover_text(self.hover_text(val));
             });
             row.col(|ui| {
                 ui.monospace(format!("{:5}", val));
@@ -380,6 +391,15 @@ impl Frontend {
     fn compute_start_row(&self) -> u16 {
         let start_row = (self.selected_memory - cmp::min(self.selected_memory, 0x90)) / 0x10;
         cmp::min(start_row, LAST_ROW)
+    }
+
+    fn hover_text(&self, val: u8) -> String {
+        match parse_instruction(val) {
+            Some(instruction) => {
+                format!("{:?}", instruction)
+            }
+            None => "INVALID".to_string(),
+        }
     }
 }
 

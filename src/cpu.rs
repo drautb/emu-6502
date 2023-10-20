@@ -12,7 +12,7 @@ use std::num::Wrapping;
 use crate::Memory;
 
 #[derive(Debug)]
-enum AddressMode {
+pub enum AddressMode {
     ACC,
     IMMEDIATE,
     ABS,
@@ -29,7 +29,7 @@ enum AddressMode {
 }
 
 #[derive(Debug)]
-enum Instruction {
+pub enum Instruction {
     ADC(u8, AddressMode), // ADd memory to accumulator with Carry
     AND(u8, AddressMode), // AND memory with accumulator
     ASL(u8, AddressMode), // Arithmetic Shift one bit Left, memory or accumulator
@@ -139,9 +139,11 @@ enum Instruction {
     TYA(u8), // Transfer Y register to the Accumulator
 
     WAI(u8), // WAit for Interrupt
+
+    INVALID, // Unrecognized opcode
 }
 
-fn parse_instruction(opcode: u8) -> Instruction {
+fn parse_instruction_internal(opcode: u8) -> Instruction {
     match opcode {
         0x69 => Instruction::ADC(opcode, AddressMode::IMMEDIATE),
         0x6D => Instruction::ADC(opcode, AddressMode::ABS),
@@ -398,10 +400,24 @@ fn parse_instruction(opcode: u8) -> Instruction {
 
         0xCB => Instruction::WAI(opcode),
 
-        _ => {
+        _ => Instruction::INVALID,
+    }
+}
+
+fn parse_instruction_or_panic(opcode: u8) -> Instruction {
+    match parse_instruction_internal(opcode) {
+        Instruction::INVALID => {
             println!("Unrecognized opcode! {}", opcode);
-            panic!("Unrecognized opcode!")
+            panic!("Unrecognized opcode!");
         }
+        other => other,
+    }
+}
+
+pub fn parse_instruction(opcode: u8) -> Option<Instruction> {
+    match parse_instruction_internal(opcode) {
+        Instruction::INVALID => None,
+        instruction => Some(instruction),
     }
 }
 
@@ -542,7 +558,7 @@ impl Cpu {
 
     pub fn step(&mut self, mem: &mut Memory) {
         self.load_instruction(mem);
-        let instruction = parse_instruction(self.ir);
+        let instruction = parse_instruction_or_panic(self.ir);
         match instruction {
             Instruction::ADC(_, address_mode) => {
                 let n1 = self.a;
