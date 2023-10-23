@@ -392,7 +392,7 @@ impl Frontend {
                         }
                     }
                 });
-                ui.monospace("");
+                ui.label(egui::RichText::new("0123456789ABCDEF").strong().monospace());
                 ui.end_row();
                 let start_row = self.compute_start_row();
                 for r in start_row..start_row + MEMORY_ROWS {
