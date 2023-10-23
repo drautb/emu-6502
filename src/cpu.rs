@@ -3718,6 +3718,27 @@ mod tests {
         }
 
         #[test]
+        fn php_overflow() {
+            let (mut cpu, mut mem) = setup(vec![0x08]);
+            cpu.p = 0b11001100;
+            cpu.s = 0;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(mem[0x0100], 0b11111100);
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x08,
+                    pc: 1,
+                    p: 0b11001100,
+                    s: 0xFF,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
         fn phx() {
             let (mut cpu, mut mem) = setup(vec![0xDA]);
             cpu.x = 42;
@@ -3817,6 +3838,27 @@ mod tests {
                     ir: 0x28,
                     pc: 1,
                     s: 0xFF,
+                    p: 42,
+                    ..Cpu::new()
+                }
+            );
+        }
+
+        #[test]
+        fn plp_underflow() {
+            let (mut cpu, mut mem) = setup(vec![0x28]);
+            cpu.s = 0xFF;
+            cpu.p = 63;
+            mem[0x0100] = 42;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x28,
+                    pc: 1,
+                    s: 0x00,
                     p: 42,
                     ..Cpu::new()
                 }

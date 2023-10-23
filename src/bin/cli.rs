@@ -11,7 +11,7 @@ struct Emu6502Args {
     start_address: usize,
 
     #[arg(short, long, default_value = "0")]
-    initial_pc: usize
+    initial_pc: usize,
 }
 
 fn main() {
