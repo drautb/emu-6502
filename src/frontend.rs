@@ -32,6 +32,9 @@ pub struct Frontend {
 
     // PC override string
     pc_override: String,
+
+    // Field for new breakpoint address
+    new_breakpoint_addr: u16,
 }
 
 impl eframe::App for Frontend {
@@ -53,6 +56,16 @@ impl eframe::App for Frontend {
                 .fixed_size(Vec2::new(200.0, 1.0))
                 .show(ctx, |ui| {
                     self.show_memory_window(ui);
+                });
+        });
+
+        egui::CentralPanel::default().show(ctx, |_ui| {
+            let mut open = true;
+            egui::Window::new("Breakpoints")
+                .open(&mut open)
+                .fixed_size(Vec2::new(100.0, 1.0))
+                .show(ctx, |ui| {
+                    self.show_breakpoints_window(ui);
                 });
         });
     }
@@ -109,9 +122,14 @@ impl Frontend {
                     ui.monospace("pc");
                 });
 
-                let pc = self.emulator.lock().unwrap().cpu().program_counter();
+                let emulator = self.emulator.lock().unwrap();
+                let pc = emulator.cpu().program_counter() as u16;
                 row.col(|ui| {
-                    ui.monospace(format!("{:#06X}", pc));
+                    let mut text = egui::RichText::new(format!("{:#06X}", pc)).monospace();
+                    if emulator.breakpoints().contains(&pc) {
+                        text = text.background_color(Color32::DARK_RED);
+                    }
+                    ui.label(text);
                 });
                 row.col(|ui| {
                     ui.monospace(format!("{:5}", pc));
@@ -430,6 +448,10 @@ impl Frontend {
                     text = text.color(Color32::LIGHT_BLUE);
                 }
 
+                if emulator.breakpoints().contains(&addr) {
+                    text = text.background_color(Color32::DARK_RED);
+                }
+
                 if addr as usize == emulator.cpu().program_counter() {
                     text = text.background_color(Color32::DARK_GREEN);
                 }
@@ -475,6 +497,78 @@ impl Frontend {
             }
             None => "INVALID".to_string(),
         }
+    }
+
+    pub fn show_breakpoints_window(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.monospace("0x");
+
+            let mut breakpoint_addr = format!("{:X}", self.new_breakpoint_addr);
+            ui.add(
+                TextEdit::singleline(&mut breakpoint_addr)
+                    .desired_width(40.0)
+                    .char_limit(4)
+                    .clip_text(false),
+            );
+            self.new_breakpoint_addr = match u16::from_str_radix(breakpoint_addr.as_str(), 16) {
+                Ok(val) => val,
+                _ => self.new_breakpoint_addr,
+            };
+
+            let mut emulator = self.emulator.lock().unwrap();
+            if ui
+                .add_enabled(
+                    !emulator.breakpoints().contains(&self.new_breakpoint_addr),
+                    egui::Button::new("⊞"),
+                )
+                .clicked()
+            {
+                emulator.add_breakpoint(self.new_breakpoint_addr);
+            }
+        });
+
+        ui.separator();
+
+        let table = TableBuilder::new(ui)
+            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+            .column(Column::auto())
+            .column(Column::auto())
+            .column(Column::auto());
+        table.body(|mut body| {
+            let mut erase_breakpoint = usize::MAX;
+            let mut emulator = self.emulator.lock().unwrap();
+            for (i, breakpoint) in emulator.breakpoints().iter().enumerate() {
+                body.row(30.0, |mut row| {
+                    row.col(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(format!("{}.", i + 1)).monospace());
+                        });
+                    });
+
+                    row.col(|ui| {
+                        ui.horizontal(|ui| {
+                            let mut text =
+                                egui::RichText::new(format!("{:#06X}", breakpoint)).monospace();
+                            if emulator.cpu().program_counter() == *breakpoint as usize {
+                                text = text.background_color(Color32::DARK_RED);
+                            }
+                            ui.label(text);
+                        });
+                    });
+
+                    row.col(|ui| {
+                        ui.horizontal(|ui| {
+                            if ui.button("⊟").clicked() {
+                                erase_breakpoint = i;
+                            }
+                        });
+                    });
+                });
+            }
+            if erase_breakpoint < usize::MAX {
+                emulator.remove_breakpoint(erase_breakpoint);
+            }
+        });
     }
 }
 

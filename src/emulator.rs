@@ -12,6 +12,7 @@ pub struct Emulator {
 
     paused: bool,
     step_count: u64,
+    breakpoints: Vec<u16>,
 }
 
 impl Default for Emulator {
@@ -27,6 +28,7 @@ impl Emulator {
             memory: [0; 65_536],
             paused: true,
             step_count: 0,
+            breakpoints: vec![],
         }
     }
 
@@ -49,6 +51,11 @@ impl Emulator {
     pub fn step_cpu(&mut self) {
         self.cpu.step(&mut self.memory);
         self.step_count += 1;
+
+        let pc = self.cpu.program_counter() as u16;
+        if self.breakpoints.contains(&pc) {
+            self.pause();
+        }
     }
 
     pub fn override_program_counter(&mut self, new_pc: usize) {
@@ -65,6 +72,18 @@ impl Emulator {
 
     pub fn unpause(&mut self) {
         self.paused = false;
+    }
+
+    pub fn breakpoints(&self) -> &Vec<u16> {
+        &self.breakpoints
+    }
+
+    pub fn add_breakpoint(&mut self, new_breakpoint: u16) {
+        self.breakpoints.push(new_breakpoint);
+    }
+
+    pub fn remove_breakpoint(&mut self, idx: usize) {
+        self.breakpoints.remove(idx);
     }
 
     /**
