@@ -172,12 +172,16 @@ impl Frontend {
                     row.col(|ui| {
                         ui.horizontal(|ui| {
                             let mut emulator = self.emulator.lock().unwrap();
-                            if ui.button("▶").on_hover_text("Run continuously").clicked() {
+                            if ui
+                                .add_enabled(emulator.is_paused(), egui::Button::new("▶"))
+                                .on_hover_text("Run continuously")
+                                .clicked()
+                            {
                                 emulator.unpause();
                             }
 
                             if ui
-                                .button("⏸")
+                                .add_enabled(!emulator.is_paused(), egui::Button::new("⏸"))
                                 .on_hover_text("Pause for single steps")
                                 .clicked()
                             {
@@ -185,7 +189,7 @@ impl Frontend {
                             }
 
                             if ui
-                                .button("Step")
+                                .add_enabled(emulator.is_paused(), egui::Button::new("Step"))
                                 .on_hover_text("Execute next instruction")
                                 .clicked()
                             {
@@ -194,7 +198,7 @@ impl Frontend {
                             };
 
                             if ui
-                                .button("Load")
+                                .add_enabled(emulator.is_paused(), egui::Button::new("Load"))
                                 .on_hover_text("Load next instruction")
                                 .clicked()
                             {
@@ -202,7 +206,11 @@ impl Frontend {
                                 self.instruction_loaded = true;
                             };
 
-                            if ui.button("🔃").on_hover_text("Reset").clicked() {
+                            if ui
+                                .add_enabled(emulator.is_paused(), egui::Button::new("🔃"))
+                                .on_hover_text("Reset")
+                                .clicked()
+                            {
                                 emulator.reset_cpu();
                                 self.instruction_loaded = false;
                             };
@@ -218,7 +226,10 @@ impl Frontend {
                                     _ => 0,
                                 };
 
-                            if ui.button("Override PC").clicked() {
+                            if ui
+                                .add_enabled(emulator.is_paused(), egui::Button::new("Override PC"))
+                                .clicked()
+                            {
                                 emulator.override_program_counter(pc_override);
                             }
 
