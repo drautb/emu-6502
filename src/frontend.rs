@@ -41,7 +41,7 @@ pub struct Frontend {
 impl eframe::App for Frontend {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.continuous {
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(10));
             self.emulator.step_cpu();
             self.selected_memory = self.emulator.cpu().program_counter() as u16;
         }
@@ -418,7 +418,8 @@ impl Frontend {
                 }
 
                 if ui
-                    .add(egui::Label::new(text).sense(egui::Sense::click()))
+                    .add(egui::Label::new(text).sense(egui::Sense::click()).sense(egui::Sense::hover()))
+                    .on_hover_text(format!("{:08b}", byte))
                     .clicked()
                 {
                     self.selected_memory = addr;
