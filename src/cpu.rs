@@ -423,6 +423,7 @@ pub fn parse_instruction(opcode: u8) -> Option<Instruction> {
 
 const PN_MASK: u8 = 0b10000000;
 const PV_MASK: u8 = 0b01000000;
+const P5_MASK: u8 = 0b00100000;
 const PB_MASK: u8 = 0b00010000;
 const PD_MASK: u8 = 0b00001000;
 const PI_MASK: u8 = 0b00000100;
@@ -803,7 +804,7 @@ impl Cpu {
             }
 
             Instruction::PHA(_) => self.push_stack_inst(mem, self.a),
-            Instruction::PHP(_) => self.push_stack_inst(mem, self.p),
+            Instruction::PHP(_) => self.push_stack_inst(mem, self.p | P5_MASK | PB_MASK),
             Instruction::PHX(_) => self.push_stack_inst(mem, self.x),
             Instruction::PHY(_) => self.push_stack_inst(mem, self.y),
             Instruction::PLA(_) => {
@@ -812,7 +813,9 @@ impl Cpu {
                 self.incr_pc();
             }
             Instruction::PLP(_) => {
-                self.p = self.pop_stack(mem);
+                let mut tmp_p = self.pop_stack(mem);
+                tmp_p &= !(P5_MASK | PB_MASK) | self.p;
+                self.p = tmp_p;
                 self.incr_pc();
             }
             Instruction::PLX(_) => {
@@ -1170,7 +1173,11 @@ impl Cpu {
         let operand = self.resolve_operand(&address_mode, mem);
         let result = sub_wrap(register, operand);
         self.update_status_nz(result);
-        self.update_status_c(result, register);
+        if operand <= register {
+            self.set_status(PC_MASK);
+        } else {
+            self.clear_status(PC_MASK);
+        }
         self.update_pc(address_mode);
     }
 
@@ -1208,11 +1215,11 @@ impl Cpu {
 
     fn push_stack(&mut self, mem: &mut Memory, val: u8) {
         mem[(self.s as u16 + 0x100) as usize] = val;
-        self.s -= 1;
+        self.s = dec_wrap(self.s);
     }
 
     fn pop_stack(&mut self, mem: &mut Memory) -> u8 {
-        self.s += 1;
+        self.s = inc_wrap(self.s);
         mem[(self.s as u16 + 0x100) as usize]
     }
 
@@ -2420,6 +2427,26 @@ mod tests {
                     ir: 0xC9,
                     pc: 2,
                     a: 10,
+                    p: PZ_MASK | PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn cmp_equal_zero() {
+            let (mut cpu, mut mem) = setup(vec![0xC9, 0]);
+            cpu.a = 0;
+            cpu.p = PN_MASK;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xC9,
+                    pc: 2,
+                    a: 0,
                     p: PZ_MASK | PC_MASK,
                     ..Cpu::new()
                 }
@@ -3673,17 +3700,17 @@ mod tests {
         #[test]
         fn php() {
             let (mut cpu, mut mem) = setup(vec![0x08]);
-            cpu.p = 42;
+            cpu.p = 0b11001100;
 
             cpu.step(&mut mem);
 
-            assert_eq!(mem[0x01FF], 42);
+            assert_eq!(mem[0x01FF], 0b11111100);
             assert_eq!(
                 cpu,
                 Cpu {
                     ir: 0x08,
                     pc: 1,
-                    p: 42,
+                    p: 0b11001100,
                     s: 0xFE,
                     ..Cpu::new()
                 }
