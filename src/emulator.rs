@@ -9,6 +9,9 @@ use crate::Memory;
 pub struct Emulator {
     cpu: Cpu,
     memory: Memory,
+
+    paused: bool,
+    step_count: u64,
 }
 
 impl Default for Emulator {
@@ -22,6 +25,8 @@ impl Emulator {
         Emulator {
             cpu: Cpu::new(),
             memory: [0; 65_536],
+            paused: true,
+            step_count: 0,
         }
     }
 
@@ -43,10 +48,23 @@ impl Emulator {
 
     pub fn step_cpu(&mut self) {
         self.cpu.step(&mut self.memory);
+        self.step_count += 1;
     }
 
     pub fn override_program_counter(&mut self, new_pc: usize) {
         self.cpu.override_program_counter(new_pc);
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
+    pub fn pause(&mut self) {
+        self.paused = true;
+    }
+
+    pub fn unpause(&mut self) {
+        self.paused = false;
     }
 
     /**

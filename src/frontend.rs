@@ -1,6 +1,5 @@
 use std::cmp;
-use std::thread::sleep;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
 use crate::cpu::parse_instruction;
 use crate::emulator::Emulator;
@@ -20,7 +19,7 @@ const LAST_ROW: u16 = LAST_ROW_START_ADDRESS / 0x10;
 #[derive(Default)]
 pub struct Frontend {
     // The emulator
-    emulator: Emulator,
+    emulator: Arc<Mutex<Emulator>>,
 
     // Selected memory cell in viewer
     selected_memory: u16,
@@ -33,19 +32,10 @@ pub struct Frontend {
 
     // PC override string
     pc_override: String,
-
-    // Run continuously or in single step mode
-    continuous: bool,
 }
 
 impl eframe::App for Frontend {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if self.continuous {
-            sleep(Duration::from_millis(10));
-            self.emulator.step_cpu();
-            self.selected_memory = self.emulator.cpu().program_counter() as u16;
-        }
-
         egui::CentralPanel::default().show(ctx, |_ui| {
             let mut open = true;
             egui::Window::new("CPU")
@@ -69,6 +59,13 @@ impl eframe::App for Frontend {
 }
 
 impl Frontend {
+    pub fn new(emulator: Arc<Mutex<Emulator>>) -> Self {
+        Frontend {
+            emulator,
+            ..Default::default()
+        }
+    }
+
     pub fn show_cpu_window(&mut self, ui: &mut Ui) {
         self.show_cpu_controls(ui);
 
@@ -103,7 +100,6 @@ impl Frontend {
             });
         });
 
-        let cpu = self.emulator.cpu();
         table.body(|mut body| {
             body.row(18.0, |mut row| {
                 row.col(|ui| {
@@ -113,7 +109,7 @@ impl Frontend {
                     ui.monospace("pc");
                 });
 
-                let pc = cpu.program_counter();
+                let pc = self.emulator.lock().unwrap().cpu().program_counter();
                 row.col(|ui| {
                     ui.monospace(format!("{:#06X}", pc));
                 });
@@ -137,6 +133,8 @@ impl Frontend {
             }
             ir_label.push_str("Instruction Register");
 
+            let emulator = self.emulator.lock().unwrap();
+            let cpu = emulator.cpu();
             self.show_register(&mut body, &ir_label, "ir", cpu.instruction_register());
             self.show_register(&mut body, "Accumulator", "a", cpu.accumulator());
             self.show_register(&mut body, "X", "x", cpu.x_register());
@@ -149,6 +147,8 @@ impl Frontend {
 
         ui.heading("Status Flags");
         ui.horizontal_centered(|ui| {
+            let emulator = self.emulator.lock().unwrap();
+            let cpu = emulator.cpu();
             self.show_status_flag(ui, "N", cpu.get_status_neg());
             self.show_status_flag(ui, "V", cpu.get_status_overflow());
             self.show_status_flag(ui, "_", false);
@@ -171,8 +171,9 @@ impl Frontend {
                 body.row(30.0, |mut row| {
                     row.col(|ui| {
                         ui.horizontal(|ui| {
+                            let mut emulator = self.emulator.lock().unwrap();
                             if ui.button("▶").on_hover_text("Run continuously").clicked() {
-                                self.continuous = true;
+                                emulator.unpause();
                             }
 
                             if ui
@@ -180,7 +181,7 @@ impl Frontend {
                                 .on_hover_text("Pause for single steps")
                                 .clicked()
                             {
-                                self.continuous = false;
+                                emulator.pause();
                             }
 
                             if ui
@@ -188,7 +189,7 @@ impl Frontend {
                                 .on_hover_text("Execute next instruction")
                                 .clicked()
                             {
-                                self.emulator.step_cpu();
+                                emulator.step_cpu();
                                 self.instruction_loaded = false;
                             };
 
@@ -197,12 +198,12 @@ impl Frontend {
                                 .on_hover_text("Load next instruction")
                                 .clicked()
                             {
-                                self.emulator.load_next_instruction();
+                                emulator.load_next_instruction();
                                 self.instruction_loaded = true;
                             };
 
                             if ui.button("🔃").on_hover_text("Reset").clicked() {
-                                self.emulator.reset_cpu();
+                                emulator.reset_cpu();
                                 self.instruction_loaded = false;
                             };
                         });
@@ -210,6 +211,7 @@ impl Frontend {
 
                     row.col(|ui| {
                         ui.horizontal(|ui| {
+                            let mut emulator = self.emulator.lock().unwrap();
                             let pc_override =
                                 match usize::from_str_radix(self.pc_override.as_str(), 16) {
                                     Ok(val) => val,
@@ -217,7 +219,7 @@ impl Frontend {
                                 };
 
                             if ui.button("Override PC").clicked() {
-                                self.emulator.override_program_counter(pc_override);
+                                emulator.override_program_counter(pc_override);
                             }
 
                             ui.add(
@@ -231,7 +233,8 @@ impl Frontend {
                     });
 
                     row.col(|ui| {
-                        ui.monospace(self.hover_text(self.emulator.cpu().instruction_register()));
+                        let emulator = self.emulator.lock().unwrap();
+                        ui.monospace(self.hover_text(emulator.cpu().instruction_register()));
                     });
                 });
             });
@@ -294,9 +297,10 @@ impl Frontend {
                             _ => self.selected_memory,
                         };
 
+                        let mut emulator = self.emulator.lock().unwrap();
                         if ui.button("Load Binary").clicked() {
                             if let Some(path) = rfd::FileDialog::new().pick_file() {
-                                self.emulator.load_binary(path, self.binary_orig.into());
+                                emulator.load_binary(path, self.binary_orig.into());
                             }
                         }
                     });
@@ -348,8 +352,9 @@ impl Frontend {
 
                         ui.separator();
 
+                        let emulator = self.emulator.lock().unwrap();
                         if ui.button("PC").clicked() {
-                            self.selected_memory = self.emulator.cpu().program_counter() as u16;
+                            self.selected_memory = emulator.cpu().program_counter() as u16;
                         }
                     });
                 });
@@ -392,7 +397,8 @@ impl Frontend {
                 .monospace(),
         );
 
-        let mem = self.emulator.memory();
+        let emulator = self.emulator.lock().unwrap();
+        let mem = emulator.memory();
         let mut ascii_str = String::new();
         ui.horizontal(|ui| {
             for b in 0..16 {
@@ -413,12 +419,16 @@ impl Frontend {
                     text = text.color(Color32::LIGHT_BLUE);
                 }
 
-                if addr as usize == self.emulator.cpu().program_counter() {
+                if addr as usize == emulator.cpu().program_counter() {
                     text = text.background_color(Color32::DARK_GREEN);
                 }
 
                 if ui
-                    .add(egui::Label::new(text).sense(egui::Sense::click()).sense(egui::Sense::hover()))
+                    .add(
+                        egui::Label::new(text)
+                            .sense(egui::Sense::click())
+                            .sense(egui::Sense::hover()),
+                    )
                     .on_hover_text(format!("{:08b}", byte))
                     .clicked()
                 {
