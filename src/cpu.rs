@@ -669,10 +669,6 @@ impl Cpu {
             }
 
             Instruction::BRK(_) => {
-                if self.p & PI_MASK > 0 {
-                    panic!("BRK instruction encountered while PI set");
-                }
-
                 let return_address = self.pc + 2;
                 self.push_stack(mem, (return_address >> 8) as u8);
                 self.push_stack(mem, return_address as u8);
@@ -1080,11 +1076,11 @@ impl Cpu {
     }
 
     fn resolve_zpix(&self, mem: &Memory) -> usize {
-        (self.second_byte_operand(mem) + self.x) as usize
+        (add_wrap(self.second_byte_operand(mem), self.x)) as usize
     }
 
     fn resolve_zpiy(&self, mem: &Memory) -> usize {
-        (self.second_byte_operand(mem) + self.y) as usize
+        (add_wrap(self.second_byte_operand(mem), self.y)) as usize
     }
 
     fn resolve_zpi(&self, mem: &Memory) -> usize {
@@ -1094,7 +1090,7 @@ impl Cpu {
     }
 
     fn resolve_zpii(&self, mem: &Memory) -> usize {
-        let indirect_address = self.second_byte_operand(mem) + self.x;
+        let indirect_address = add_wrap(self.second_byte_operand(mem), self.x);
         let operand_address: u16 = self.deref_mem(mem, indirect_address as usize);
         operand_address as usize
     }
@@ -4707,16 +4703,6 @@ mod tests {
             assert_eq!(mem[0x01FF], 0x01);
             assert_eq!(mem[0x01FE], 0x2E);
             assert_eq!(mem[0x01FD], PZ_MASK | PN_MASK | PD_MASK | PB_MASK | P5_MASK);
-        }
-
-        #[test]
-        #[should_panic]
-        fn brk_panic() {
-            let (mut cpu, mut mem) = setup(vec![0x00]);
-
-            cpu.p = PI_MASK;
-
-            cpu.step(&mut mem);
         }
 
         #[test]
