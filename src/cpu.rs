@@ -881,6 +881,16 @@ impl Cpu {
                 self.pc = ((pch << 8) | pcl) as usize + 1;
             }
 
+            Instruction::SBC(_, address_mode) => {
+                let n1 = self.a;
+                let n2 = !self.resolve_operand(&address_mode, mem);
+                self.a = add_wrap(n1, n2);
+                self.update_status_nz(self.a);
+                self.update_status_c(self.a, n1);
+                self.update_status_v(self.a, n1, n2);
+                self.update_pc(address_mode);
+            }
+
             Instruction::SEC(_) => {
                 self.set_status(PC_MASK);
                 self.incr_pc();
