@@ -673,10 +673,10 @@ impl Cpu {
                     panic!("BRK instruction encountered while PI set");
                 }
 
-                let return_address = self.pc + 1;
+                let return_address = self.pc + 2;
                 self.push_stack(mem, (return_address >> 8) as u8);
                 self.push_stack(mem, return_address as u8);
-                self.push_stack(mem, self.p);
+                self.push_stack(mem, self.p | P5_MASK | PB_MASK);
                 self.set_status(PI_MASK);
                 self.clear_status(PD_MASK);
                 // BRK uses the vector at $FFFE-$FFFF - http://6502.org/tutorials/interrupts.html#2.2
@@ -4705,8 +4705,8 @@ mod tests {
 
             // 0x012D = 301st byte - end of BRK instruction
             assert_eq!(mem[0x01FF], 0x01);
-            assert_eq!(mem[0x01FE], 0x2D);
-            assert_eq!(mem[0x01FD], PZ_MASK | PN_MASK | PD_MASK);
+            assert_eq!(mem[0x01FE], 0x2E);
+            assert_eq!(mem[0x01FD], PZ_MASK | PN_MASK | PD_MASK | PB_MASK | P5_MASK);
         }
 
         #[test]
