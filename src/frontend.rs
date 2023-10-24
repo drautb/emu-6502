@@ -385,6 +385,9 @@ impl Frontend {
                         if ui.button("PC").clicked() {
                             self.selected_memory = emulator.cpu().program_counter() as u16;
                         }
+                        if ui.button("S").clicked() {
+                            self.selected_memory = emulator.cpu().stack_pointer() as u16 + 0x100;
+                        }
                     });
                 });
             });
