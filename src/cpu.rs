@@ -882,7 +882,7 @@ impl Cpu {
             Instruction::RTS(_) => {
                 let pcl: u16 = self.pop_stack(mem) as u16;
                 let pch: u16 = self.pop_stack(mem) as u16;
-                self.pc = ((pch << 8) | pcl) as usize;
+                self.pc = ((pch << 8) | pcl) as usize + 1;
             }
 
             Instruction::SEC(_) => {
@@ -3306,7 +3306,7 @@ mod tests {
                 cpu,
                 Cpu {
                     ir: 0x60,
-                    pc: 0x012E,
+                    pc: 0x012F,
                     s: 0xFF,
                     ..Cpu::new()
                 }
