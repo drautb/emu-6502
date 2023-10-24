@@ -35,6 +35,9 @@ pub struct Frontend {
 
     // Field for new breakpoint address
     new_breakpoint_addr: u16,
+
+    // Field for new breakpoint step count
+    new_breakpoint_step: u64,
 }
 
 impl eframe::App for Frontend {
@@ -84,7 +87,12 @@ impl Frontend {
 
         ui.separator();
 
-        ui.heading("Registers");
+        ui.horizontal(|ui| {
+            let emulator = self.emulator.lock().unwrap();
+            ui.heading("Registers");
+            ui.separator();
+            ui.monospace(format!("Step Count: {}", emulator.step_count()));
+        });
 
         let table = egui_extras::TableBuilder::new(ui)
             .striped(true)
@@ -126,7 +134,7 @@ impl Frontend {
                 let pc = emulator.cpu().program_counter() as u16;
                 row.col(|ui| {
                     let mut text = egui::RichText::new(format!("{:#06X}", pc)).monospace();
-                    if emulator.breakpoints().contains(&pc) {
+                    if emulator.pc_breakpoints().contains(&pc) {
                         text = text.background_color(Color32::DARK_RED);
                     }
                     ui.label(text);
@@ -190,6 +198,7 @@ impl Frontend {
                     row.col(|ui| {
                         ui.horizontal(|ui| {
                             let mut emulator = self.emulator.lock().unwrap();
+
                             if ui
                                 .add_enabled(emulator.is_paused(), egui::Button::new("▶"))
                                 .on_hover_text("Run continuously")
@@ -451,7 +460,7 @@ impl Frontend {
                     text = text.color(Color32::LIGHT_BLUE);
                 }
 
-                if emulator.breakpoints().contains(&addr) {
+                if emulator.pc_breakpoints().contains(&addr) {
                     text = text.background_color(Color32::DARK_RED);
                 }
 
@@ -504,16 +513,16 @@ impl Frontend {
 
     pub fn show_breakpoints_window(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            ui.monospace("0x");
+            ui.monospace("PC: 0x");
 
-            let mut breakpoint_addr = format!("{:X}", self.new_breakpoint_addr);
+            let mut pc_breakpoint_addr = format!("{:X}", self.new_breakpoint_addr);
             ui.add(
-                TextEdit::singleline(&mut breakpoint_addr)
+                TextEdit::singleline(&mut pc_breakpoint_addr)
                     .desired_width(40.0)
                     .char_limit(4)
                     .clip_text(false),
             );
-            self.new_breakpoint_addr = match u16::from_str_radix(breakpoint_addr.as_str(), 16) {
+            self.new_breakpoint_addr = match u16::from_str_radix(pc_breakpoint_addr.as_str(), 16) {
                 Ok(val) => val,
                 _ => self.new_breakpoint_addr,
             };
@@ -521,12 +530,41 @@ impl Frontend {
             let mut emulator = self.emulator.lock().unwrap();
             if ui
                 .add_enabled(
-                    !emulator.breakpoints().contains(&self.new_breakpoint_addr),
+                    !emulator
+                        .pc_breakpoints()
+                        .contains(&self.new_breakpoint_addr),
                     egui::Button::new("⊞"),
                 )
                 .clicked()
             {
-                emulator.add_breakpoint(self.new_breakpoint_addr);
+                emulator.add_pc_breakpoint(self.new_breakpoint_addr);
+            }
+
+            ui.separator();
+
+            ui.monospace("Step:");
+            let mut step_breakpoint_val = format!("{}", self.new_breakpoint_step);
+            ui.add(
+                TextEdit::singleline(&mut step_breakpoint_val)
+                    .desired_width(100.0)
+                    .char_limit(20)
+                    .clip_text(false),
+            );
+            self.new_breakpoint_step = match step_breakpoint_val.as_str().parse::<u64>() {
+                Ok(val) => val,
+                _ => self.new_breakpoint_step,
+            };
+
+            if ui
+                .add_enabled(
+                    !emulator
+                        .step_breakpoints()
+                        .contains(&self.new_breakpoint_step),
+                    egui::Button::new("⊞"),
+                )
+                .clicked()
+            {
+                emulator.add_step_breakpoint(self.new_breakpoint_step);
             }
         });
 
@@ -537,21 +575,35 @@ impl Frontend {
             .column(Column::auto())
             .column(Column::auto())
             .column(Column::auto());
+
+        let table = table.header(24.0, |mut header| {
+            header.col(|ui| {
+                ui.monospace("Type");
+            });
+            header.col(|ui| {
+                ui.monospace("Location");
+            });
+            header.col(|ui| {
+                ui.monospace("🗑");
+            });
+        });
+
         table.body(|mut body| {
             let mut erase_breakpoint = usize::MAX;
             let mut emulator = self.emulator.lock().unwrap();
-            for (i, breakpoint) in emulator.breakpoints().iter().enumerate() {
+
+            // PC Breakpoints
+            for (i, breakpoint) in emulator.pc_breakpoints().iter().enumerate() {
                 body.row(30.0, |mut row| {
                     row.col(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(format!("{}.", i + 1)).monospace());
-                        });
+                        ui.horizontal(|ui| ui.monospace("[PC]"));
                     });
 
                     row.col(|ui| {
                         ui.horizontal(|ui| {
                             let mut text =
-                                egui::RichText::new(format!("{:#06X}", breakpoint)).monospace();
+                                egui::RichText::new(format!("              {:#06X}", breakpoint))
+                                    .monospace();
                             if emulator.cpu().program_counter() == *breakpoint as usize {
                                 text = text.background_color(Color32::DARK_RED);
                             }
@@ -569,7 +621,42 @@ impl Frontend {
                 });
             }
             if erase_breakpoint < usize::MAX {
-                emulator.remove_breakpoint(erase_breakpoint);
+                emulator.remove_pc_breakpoint(erase_breakpoint);
+                erase_breakpoint = usize::MAX;
+            }
+
+            // Step Breakpoitns
+            for (i, breakpoint) in emulator.step_breakpoints().iter().enumerate() {
+                body.row(30.0, |mut row| {
+                    row.col(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.monospace("[Step]");
+                        });
+                    });
+
+                    row.col(|ui| {
+                        ui.horizontal(|ui| {
+                            let mut text =
+                                egui::RichText::new(format!("{:20}", breakpoint)).monospace();
+                            if emulator.step_count() == *breakpoint {
+                                text = text.background_color(Color32::DARK_RED);
+                            }
+                            ui.label(text);
+                        });
+                    });
+
+                    row.col(|ui| {
+                        ui.horizontal(|ui| {
+                            if ui.button("⊟").clicked() {
+                                erase_breakpoint = i;
+                            }
+                        });
+                    });
+                });
+            }
+
+            if erase_breakpoint < usize::MAX {
+                emulator.remove_step_breakpoint(erase_breakpoint);
             }
         });
     }

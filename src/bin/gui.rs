@@ -17,8 +17,15 @@ fn main() -> Result<(), eframe::Error> {
         loop {
             let mut emulator = emulator.lock().unwrap();
 
+            let old_pc = emulator.cpu().program_counter();
             if !emulator.is_paused() {
                 emulator.step_cpu();
+
+                // Pause when PC doesn't change, which indicates HCF
+                // https://en.wikipedia.org/wiki/Halt_and_Catch_Fire_(computing)
+                if emulator.cpu().program_counter() == old_pc {
+                    emulator.pause();
+                }
             }
         }
     });

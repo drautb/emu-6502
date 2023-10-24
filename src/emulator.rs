@@ -12,7 +12,8 @@ pub struct Emulator {
 
     paused: bool,
     step_count: u64,
-    breakpoints: Vec<u16>,
+    pc_breakpoints: Vec<u16>,
+    step_breakpoints: Vec<u64>,
 }
 
 impl Default for Emulator {
@@ -28,7 +29,8 @@ impl Emulator {
             memory: [0; 65_536],
             paused: true,
             step_count: 0,
-            breakpoints: vec![],
+            pc_breakpoints: vec![],
+            step_breakpoints: vec![],
         }
     }
 
@@ -53,7 +55,7 @@ impl Emulator {
         self.step_count += 1;
 
         let pc = self.cpu.program_counter() as u16;
-        if self.breakpoints.contains(&pc) {
+        if self.pc_breakpoints.contains(&pc) || self.step_breakpoints.contains(&self.step_count) {
             self.pause();
         }
     }
@@ -74,16 +76,32 @@ impl Emulator {
         self.paused = false;
     }
 
-    pub fn breakpoints(&self) -> &Vec<u16> {
-        &self.breakpoints
+    pub fn step_count(&self) -> u64 {
+        self.step_count
     }
 
-    pub fn add_breakpoint(&mut self, new_breakpoint: u16) {
-        self.breakpoints.push(new_breakpoint);
+    pub fn pc_breakpoints(&self) -> &Vec<u16> {
+        &self.pc_breakpoints
     }
 
-    pub fn remove_breakpoint(&mut self, idx: usize) {
-        self.breakpoints.remove(idx);
+    pub fn add_pc_breakpoint(&mut self, new_breakpoint: u16) {
+        self.pc_breakpoints.push(new_breakpoint);
+    }
+
+    pub fn remove_pc_breakpoint(&mut self, idx: usize) {
+        self.pc_breakpoints.remove(idx);
+    }
+
+    pub fn step_breakpoints(&self) -> &Vec<u64> {
+        &self.step_breakpoints
+    }
+
+    pub fn add_step_breakpoint(&mut self, new_breakpoint: u64) {
+        self.step_breakpoints.push(new_breakpoint);
+    }
+
+    pub fn remove_step_breakpoint(&mut self, idx: usize) {
+        self.step_breakpoints.remove(idx);
     }
 
     /**
