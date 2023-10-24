@@ -460,6 +460,10 @@ impl Frontend {
                     text = text.color(Color32::LIGHT_BLUE);
                 }
 
+                if addr == emulator.cpu().stack_pointer() as u16 + 0x100 {
+                    text = text.underline();
+                }
+
                 if emulator.pc_breakpoints().contains(&addr) {
                     text = text.background_color(Color32::DARK_RED);
                 }

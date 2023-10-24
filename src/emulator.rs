@@ -44,6 +44,7 @@ impl Emulator {
 
     pub fn reset_cpu(&mut self) {
         self.cpu.reset(&self.memory);
+        self.step_count = 0;
     }
 
     pub fn load_next_instruction(&mut self) {
