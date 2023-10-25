@@ -564,7 +564,23 @@ impl Cpu {
             Instruction::ADC(_, address_mode) => {
                 let n1 = self.a;
                 let n2 = self.resolve_operand(&address_mode, mem);
-                self.a = add_wrap(n1, n2);
+                self.a = add_wrap(add_wrap(n1, n2), self.p & PC_MASK);
+                let total = n1 as u16 + n2 as u16 + (self.p & PC_MASK) as u16;
+                if total > 255 {
+                    self.set_status(PC_MASK);
+                } else {
+                    self.clear_status(PC_MASK);
+                }
+                self.update_status_nz(self.a);
+
+                self.update_status_v(self.a, n1, n2);
+                self.update_pc(address_mode);
+            }
+
+            Instruction::SBC(_, address_mode) => {
+                let n1 = self.a;
+                let n2 = !self.resolve_operand(&address_mode, mem);
+                self.a = add_wrap(add_wrap(n1, n2), self.p & PC_MASK);
                 self.update_status_nz(self.a);
                 self.update_status_c(self.a, n1);
                 self.update_status_v(self.a, n1, n2);
@@ -879,16 +895,6 @@ impl Cpu {
                 let pcl: u16 = self.pop_stack(mem) as u16;
                 let pch: u16 = self.pop_stack(mem) as u16;
                 self.pc = ((pch << 8) | pcl) as usize + 1;
-            }
-
-            Instruction::SBC(_, address_mode) => {
-                let n1 = self.a;
-                let n2 = !self.resolve_operand(&address_mode, mem);
-                self.a = add_wrap(n1, n2);
-                self.update_status_nz(self.a);
-                self.update_status_c(self.a, n1);
-                self.update_status_v(self.a, n1, n2);
-                self.update_pc(address_mode);
             }
 
             Instruction::SEC(_) => {
@@ -1285,7 +1291,7 @@ mod tests {
         fn adc() {
             let (mut cpu, mut mem) = setup(vec![0x69, 2]);
             cpu.a = 40;
-            cpu.p = PC_MASK | PZ_MASK | PN_MASK | PV_MASK; // These should all be cleared
+            cpu.p = PZ_MASK | PN_MASK | PV_MASK; // These should all be cleared
 
             cpu.step(&mut mem);
 
@@ -1295,6 +1301,45 @@ mod tests {
                     ir: 0x69,
                     pc: 2,
                     a: 42,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn adc_zero_plus_zero() {
+            let (mut cpu, mut mem) = setup(vec![0x69, 0]);
+            cpu.a = 0;
+            cpu.p = PC_MASK;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x69,
+                    pc: 2,
+                    a: 1,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn adc_zero_plus_ff_vzc() {
+            let (mut cpu, mut mem) = setup(vec![0x69, 0xFF]);
+            cpu.a = 0;
+            cpu.p = PV_MASK | PZ_MASK | PC_MASK;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x69,
+                    pc: 2,
+                    a: 0,
+                    p: PZ_MASK | PC_MASK,
                     ..Cpu::new()
                 }
             )
@@ -4153,11 +4198,25 @@ mod tests {
     }
 
     mod sbc_test {
+        use super::*;
 
         #[test]
-        #[ignore]
         fn sbc_immediate() {
-            todo!();
+            let (mut cpu, mut mem) = setup(vec![0xE9, 0xFF]);
+            cpu.a = 0;
+            cpu.p = PC_MASK;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xE9,
+                    pc: 2,
+                    a: 1,
+                    ..Cpu::new()
+                }
+            )
         }
     }
 
