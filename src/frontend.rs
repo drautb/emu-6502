@@ -101,7 +101,8 @@ impl Frontend {
             .column(Column::initial(50.0))
             .column(Column::initial(50.0))
             .column(Column::initial(40.0))
-            .column(Column::initial(140.0));
+            .column(Column::initial(140.0))
+            .column(Column::initial(60.0));
 
         let table = table.header(20.0, |mut header| {
             header.col(|ui| {
@@ -118,6 +119,9 @@ impl Frontend {
             });
             header.col(|ui| {
                 ui.strong("Bin");
+            });
+            header.col(|ui| {
+                ui.strong("ASCII");
             });
         });
 
@@ -151,6 +155,7 @@ impl Frontend {
                         pc & 15
                     ));
                 });
+                row.col(|_ui| {});
             });
 
             let mut ir_label = String::new();
@@ -296,6 +301,11 @@ impl Frontend {
             });
             row.col(|ui| {
                 ui.monospace(format!("{:04b} {:04b}", val >> 4, val & 15));
+            });
+            row.col(|ui| {
+                if let Some(c) = to_ascii(val) {
+                    ui.monospace(c.to_string());
+                }
             });
         });
     }
@@ -488,8 +498,7 @@ impl Frontend {
                     ui.monospace(' '.to_string());
                 }
 
-                let c: char = byte as char;
-                if (0x20..=0x7E).contains(&byte) {
+                if let Some(c) = to_ascii(byte) {
                     ascii_str.push(c);
                 } else {
                     ascii_str.push('.');
@@ -663,6 +672,15 @@ impl Frontend {
                 emulator.remove_step_breakpoint(erase_breakpoint);
             }
         });
+    }
+}
+
+fn to_ascii(byte: u8) -> Option<char> {
+    let c: char = byte as char;
+    if (0x20..=0x7E).contains(&byte) {
+        Some(c)
+    } else {
+        None
     }
 }
 
