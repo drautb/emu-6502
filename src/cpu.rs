@@ -564,26 +564,14 @@ impl Cpu {
             Instruction::ADC(_, address_mode) => {
                 let n1 = self.a;
                 let n2 = self.resolve_operand(&address_mode, mem);
-                self.a = add_wrap(add_wrap(n1, n2), self.p & PC_MASK);
-                let total = n1 as u16 + n2 as u16 + (self.p & PC_MASK) as u16;
-                if total > 255 {
-                    self.set_status(PC_MASK);
-                } else {
-                    self.clear_status(PC_MASK);
-                }
-                self.update_status_nz(self.a);
-
-                self.update_status_v(self.a, n1, n2);
+                self.adc(n1, n2);
                 self.update_pc(address_mode);
             }
 
             Instruction::SBC(_, address_mode) => {
                 let n1 = self.a;
                 let n2 = !self.resolve_operand(&address_mode, mem);
-                self.a = add_wrap(add_wrap(n1, n2), self.p & PC_MASK);
-                self.update_status_nz(self.a);
-                self.update_status_c(self.a, n1);
-                self.update_status_v(self.a, n1, n2);
+                self.adc(n1, n2);
                 self.update_pc(address_mode);
             }
 
@@ -1143,15 +1131,6 @@ impl Cpu {
         }
     }
 
-    fn update_status_c(&mut self, result: u8, original: u8) {
-        // Carry
-        if original > result {
-            self.p |= PC_MASK;
-        } else {
-            self.p &= !PC_MASK;
-        }
-    }
-
     fn update_status_v(&mut self, result: u8, n1: u8, n2: u8) {
         // oVerflow
         if n1 & PN_MASK == n2 & PN_MASK && n1 & PN_MASK != result & PN_MASK {
@@ -1233,6 +1212,18 @@ impl Cpu {
     fn pop_stack(&mut self, mem: &mut Memory) -> u8 {
         self.s = inc_wrap(self.s);
         mem[(self.s as u16 + 0x100) as usize]
+    }
+
+    fn adc(&mut self, n1: u8, n2: u8) {
+        self.a = add_wrap(add_wrap(n1, n2), self.p & PC_MASK);
+        let total = n1 as u16 + n2 as u16 + (self.p & PC_MASK) as u16;
+        if total > 255 {
+            self.set_status(PC_MASK);
+        } else {
+            self.clear_status(PC_MASK);
+        }
+        self.update_status_nz(self.a);
+        self.update_status_v(self.a, n1, n2);
     }
 
     fn instruction_length(address_mode: AddressMode) -> usize {
@@ -4214,6 +4205,26 @@ mod tests {
                     ir: 0xE9,
                     pc: 2,
                     a: 1,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn sbc_immediate_zero_minus_zero_with_carry() {
+            let (mut cpu, mut mem) = setup(vec![0xE9, 0]);
+            cpu.a = 0;
+            cpu.p = PV_MASK | PZ_MASK | PC_MASK;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xE9,
+                    pc: 2,
+                    a: 0,
+                    p: PZ_MASK | PC_MASK,
                     ..Cpu::new()
                 }
             )
