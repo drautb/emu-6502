@@ -467,7 +467,7 @@ impl fmt::Debug for Cpu {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Cpu")
             .field("ir", &format_args!("{:#02X}", self.ir))
-            .field("a", &self.a)
+            .field("a", &format_args!("{:#04X}", self.a))
             .field("x", &self.x)
             .field("y", &self.y)
             .field("p", &format_args!("{:08b}", self.p))
@@ -564,14 +564,22 @@ impl Cpu {
             Instruction::ADC(_, address_mode) => {
                 let n1 = self.a;
                 let n2 = self.resolve_operand(&address_mode, mem);
-                self.adc(n1, n2);
+                if self.p & PD_MASK > 0 {
+                    self.adc_dec(n1, n2);
+                } else {
+                    self.adc_bin(n1, n2);
+                }
                 self.update_pc(address_mode);
             }
 
             Instruction::SBC(_, address_mode) => {
                 let n1 = self.a;
-                let n2 = !self.resolve_operand(&address_mode, mem);
-                self.adc(n1, n2);
+                let n2 = self.resolve_operand(&address_mode, mem);
+                if self.p & PD_MASK > 0 {
+                    self.sbc_dec(n1, n2);
+                } else {
+                    self.adc_bin(n1, !n2);
+                }
                 self.update_pc(address_mode);
             }
 
@@ -1214,7 +1222,7 @@ impl Cpu {
         mem[(self.s as u16 + 0x100) as usize]
     }
 
-    fn adc(&mut self, n1: u8, n2: u8) {
+    fn adc_bin(&mut self, n1: u8, n2: u8) {
         self.a = add_wrap(add_wrap(n1, n2), self.p & PC_MASK);
         let total = n1 as u16 + n2 as u16 + (self.p & PC_MASK) as u16;
         if total > 255 {
@@ -1224,6 +1232,47 @@ impl Cpu {
         }
         self.update_status_nz(self.a);
         self.update_status_v(self.a, n1, n2);
+    }
+
+    fn adc_dec(&mut self, n1: u8, n2: u8) {
+        let n1 = self.bin_to_dec(n1);
+        let n2 = self.bin_to_dec(n2);
+        let bin_result = n1 as u16 + n2 as u16 + (self.p & PC_MASK) as u16;
+        if bin_result > 99 {
+            self.set_status(PC_MASK);
+        } else {
+            self.clear_status(PC_MASK);
+        }
+        self.a = self.dec_to_bin(bin_result);
+        self.update_status_nz(self.a);
+        self.update_status_v(self.a, n1, n2);
+    }
+
+    fn sbc_dec(&mut self, n1: u8, n2: u8) {
+        let n1 = self.bin_to_dec(n1);
+        let n2 = self.bin_to_dec(n2);
+        let carry = (!self.p & PC_MASK) as u16 as i16;
+        let mut bin_result = n1 as i16 - n2 as i16 - carry;
+        if bin_result < 0 {
+            bin_result += 100;
+            self.clear_status(PC_MASK);
+        } else {
+            self.set_status(PC_MASK);
+        }
+        self.a = self.dec_to_bin(bin_result as u16);
+        self.update_status_nz(self.a);
+        self.update_status_v(self.a, n1, n2);
+    }
+
+    fn bin_to_dec(&self, val: u8) -> u8 {
+        (((val & 0b1111_0000) >> 4) * 10) + (val & 0b0000_1111)
+    }
+
+    fn dec_to_bin(&self, val: u16) -> u8 {
+        let hundreds = (val / 100) * 100;
+        let tens = ((val - hundreds) / 10) * 10;
+        let ones = val - hundreds - tens;
+        ((tens / 10) << 4 | ones) as u8
     }
 
     fn instruction_length(address_mode: AddressMode) -> usize {
@@ -1350,6 +1399,46 @@ mod tests {
                     pc: 2,
                     a: 0,
                     p: PZ_MASK | PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn adc_decimal() {
+            let (mut cpu, mut mem) = setup(vec![0x69, 0x12]);
+            cpu.a = 0x34;
+            cpu.p = PD_MASK;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x69,
+                    pc: 2,
+                    a: 0x46,
+                    p: PD_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn adc_decimal_set_carry() {
+            let (mut cpu, mut mem) = setup(vec![0x69, 0x81]);
+            cpu.a = 0x92;
+            cpu.p = PD_MASK;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0x69,
+                    pc: 2,
+                    a: 0x73,
+                    p: PD_MASK | PC_MASK,
                     ..Cpu::new()
                 }
             )
@@ -4229,6 +4318,66 @@ mod tests {
                 }
             )
         }
+
+        #[test]
+        fn sbc_decimal_99_minus_0() {
+            let (mut cpu, mut mem) = setup(vec![0xE9, 0]);
+            cpu.a = 0x99;
+            cpu.p = PN_MASK | PV_MASK | PD_MASK | PC_MASK;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xE9,
+                    pc: 2,
+                    a: 0x99,
+                    p: PN_MASK | PV_MASK | PD_MASK | PC_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn sbc_decimal_0_minus_0() {
+            let (mut cpu, mut mem) = setup(vec![0xE9, 0]);
+            cpu.a = 0x0;
+            cpu.p = PV_MASK | PD_MASK | PZ_MASK;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xE9,
+                    pc: 2,
+                    a: 0x99,
+                    p: PN_MASK | PV_MASK | PD_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
+
+        #[test]
+        fn sbc_decimal_12_minus_21() {
+            let (mut cpu, mut mem) = setup(vec![0xE9, 0x21]);
+            cpu.a = 0x12;
+            cpu.p = PD_MASK | PC_MASK;
+
+            cpu.step(&mut mem);
+
+            assert_eq!(
+                cpu,
+                Cpu {
+                    ir: 0xE9,
+                    pc: 2,
+                    a: 0x91,
+                    p: PN_MASK | PV_MASK | PD_MASK,
+                    ..Cpu::new()
+                }
+            )
+        }
     }
 
     mod set_tests {
@@ -4840,5 +4989,20 @@ mod tests {
             cpu.update_status_v(0b10000001, 0b10000001, 0b10000001);
             assert_eq!(cpu.p, 0);
         }
+    }
+
+    #[test]
+    fn test_bin_to_dec() {
+        let cpu = Cpu::new();
+
+        assert_eq!(cpu.bin_to_dec(0x99), 99);
+    }
+
+    #[test]
+    fn test_dec_to_bin() {
+        let cpu = Cpu::new();
+
+        assert_eq!(cpu.dec_to_bin(46), 0x46);
+        assert_eq!(cpu.dec_to_bin(173), 0x73);
     }
 }
