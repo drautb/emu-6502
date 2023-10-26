@@ -66,7 +66,7 @@ impl eframe::App for Frontend {
             let mut open = true;
             egui::Window::new("Breakpoints")
                 .open(&mut open)
-                .fixed_size(Vec2::new(100.0, 1.0))
+                .fixed_size(Vec2::new(300.0, 1.0))
                 .show(ctx, |ui| {
                     self.show_breakpoints_window(ui);
                 });
@@ -92,6 +92,9 @@ impl Frontend {
             ui.heading("Registers");
             ui.separator();
             ui.monospace(format!("Step Count: {}", emulator.step_count()));
+            if ui.button("⏹").on_hover_text("Add Breakpoint").clicked() {
+                self.new_breakpoint_step = emulator.step_count();
+            }
         });
 
         let table = egui_extras::TableBuilder::new(ui)
@@ -559,7 +562,7 @@ impl Frontend {
             let mut step_breakpoint_val = format!("{}", self.new_breakpoint_step);
             ui.add(
                 TextEdit::singleline(&mut step_breakpoint_val)
-                    .desired_width(100.0)
+                    .desired_width(200.0)
                     .char_limit(20)
                     .clip_text(false),
             );
