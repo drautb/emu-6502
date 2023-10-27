@@ -45,3 +45,11 @@ fn extended_opcodes_test() {
 
     assert_pc(&emulator, 0x24F1);
 }
+
+#[test]
+fn interrupt_test() {
+    let mut emulator = Emulator::new();
+    run_binary(&mut emulator, "6502_interrupt_test.bin".to_string(), 0x400);
+
+    assert_pc(&emulator, 0x06F5);
+}
