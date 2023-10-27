@@ -25,18 +25,11 @@ fn main() {
         emulator.override_program_counter(args.initial_pc);
     }
 
-    let mut step_count: u64 = 0;
-    let mut pc_changed = true;
-    let mut pc = emulator.cpu().program_counter();
-    while pc_changed {
-        emulator.step_cpu();
-        step_count += 1;
-        if pc == emulator.cpu().program_counter() {
-            pc_changed = false;
-        }
-        pc = emulator.cpu().program_counter();
+    emulator.unpause();
+    while !emulator.is_paused() {
+        emulator.clock_tick();
     }
 
-    println!("PC did not change. Step count: {}", step_count);
+    println!("PC did not change. Step count: {}", emulator.step_count());
     println!("{}", emulator.cpu());
 }

@@ -47,6 +47,19 @@ impl Emulator {
         self.step_count = 0;
     }
 
+    pub fn clock_tick(&mut self) {
+        let old_pc = self.cpu().program_counter();
+        if !self.is_paused() {
+            self.step_cpu();
+
+            // Pause when PC doesn't change, which indicates HCF
+            // https://en.wikipedia.org/wiki/Halt_and_Catch_Fire_(computing)
+            if self.cpu().program_counter() == old_pc {
+                self.pause();
+            }
+        }
+    }
+
     pub fn load_next_instruction(&mut self) {
         self.cpu.load_instruction(&self.memory);
     }
