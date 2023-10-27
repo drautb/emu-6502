@@ -929,16 +929,20 @@ impl Cpu {
                 self.incr_pc();
             }
 
+            // TRB and TSB are tricky - the Z flag isn't based on the
+            // result of the and/or, but rather on ANDing the memory and
+            // accumulator _before_ the operation.
+            // http://www.6502.org/tutorials/65c02opcodes.html#3
             Instruction::TRB(_, address_mode) => {
                 let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
+                self.update_status_z(mem[resolved_addr] & self.a);
                 mem[resolved_addr] &= !self.a;
-                self.update_status_z(mem[resolved_addr]);
                 self.update_pc(address_mode);
             }
             Instruction::TSB(_, address_mode) => {
                 let resolved_addr = self.resolve_operand_addr(&address_mode, mem);
+                self.update_status_z(mem[resolved_addr] & self.a);
                 mem[resolved_addr] |= self.a;
-                self.update_status_z(mem[resolved_addr]);
                 self.update_pc(address_mode);
             }
 
@@ -4841,17 +4845,17 @@ mod tests {
         fn trb_zero() {
             let (mut cpu, mut mem) = setup(vec![0x1C, 0xCD, 0xAB]);
             mem[0xABCD] = 0b0000_1100;
-            cpu.a = 0b0000_1111;
+            cpu.a = 0b0000_0011;
 
             cpu.step(&mut mem);
 
-            assert_eq!(mem[0xABCD], 0);
+            assert_eq!(mem[0xABCD], 0b0000_1100);
             assert_eq!(
                 cpu,
                 Cpu {
                     ir: 0x1C,
                     pc: 3,
-                    a: 0b0000_1111,
+                    a: 0b0000_0011,
                     p: PZ_MASK,
                     ..Cpu::new()
                 }
