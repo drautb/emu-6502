@@ -38,6 +38,11 @@ pub struct Frontend {
 
     // Field for new breakpoint step count
     new_breakpoint_step: u64,
+
+    // Interrupt configuration
+    new_interrupt_addr: u16,
+    new_irq_mask: u8,
+    new_nmi_mask: u8,
 }
 
 impl eframe::App for Frontend {
@@ -69,6 +74,16 @@ impl eframe::App for Frontend {
                 .fixed_size(Vec2::new(300.0, 1.0))
                 .show(ctx, |ui| {
                     self.show_breakpoints_window(ui);
+                });
+        });
+
+        egui::CentralPanel::default().show(ctx, |_ui| {
+            let mut open = true;
+            egui::Window::new("Interrupts")
+                .open(&mut open)
+                .fixed_size(Vec2::new(300.0, 1.0))
+                .show(ctx, |ui| {
+                    self.show_interrupts_window(ui);
                 });
         });
     }
@@ -477,6 +492,10 @@ impl Frontend {
                     text = text.underline();
                 }
 
+                if addr as usize == emulator.interrupt_address() {
+                    text = text.background_color(Color32::DARK_BLUE);
+                }
+
                 if emulator.pc_breakpoints().contains(&addr) {
                     text = text.background_color(Color32::DARK_RED);
                 }
@@ -669,6 +688,90 @@ impl Frontend {
             if erase_breakpoint < usize::MAX {
                 emulator.remove_step_breakpoint(erase_breakpoint);
             }
+        });
+    }
+
+    pub fn show_interrupts_window(&mut self, ui: &mut Ui) {
+        let table = egui_extras::TableBuilder::new(ui)
+            .striped(true)
+            .cell_layout(egui::Layout::right_to_left(eframe::emath::Align::Center))
+            .column(Column::initial(100.0))
+            .column(Column::initial(100.0));
+
+        table.body(|mut body| {
+            body.row(24.0, |mut row| {
+                row.col(|ui| {
+                    ui.monospace("Interrupt Address: 0x");
+                });
+                row.col(|ui| {
+                    let mut new_addr = format!("{:X}", self.new_interrupt_addr);
+                    ui.add(
+                        TextEdit::singleline(&mut new_addr)
+                            .desired_width(80.0)
+                            .char_limit(4)
+                            .clip_text(false),
+                    );
+                    self.new_interrupt_addr = match u16::from_str_radix(new_addr.as_str(), 16) {
+                        Ok(val) => val,
+                        _ => self.new_interrupt_addr,
+                    };
+                });
+            });
+
+            body.row(24.0, |mut row| {
+                row.col(|ui| {
+                    ui.monospace("IRQ Mask: 0b");
+                });
+                row.col(|ui| {
+                    let mut new_irq_mask_str = format!("{:08b}", self.new_irq_mask);
+                    ui.add(
+                        TextEdit::singleline(&mut new_irq_mask_str)
+                            .desired_width(80.0)
+                            .char_limit(8)
+                            .clip_text(false),
+                    );
+                    self.new_irq_mask = match u8::from_str_radix(new_irq_mask_str.as_str(), 2) {
+                        Ok(val) => val,
+                        _ => self.new_irq_mask,
+                    };
+                });
+            });
+
+            body.row(24.0, |mut row| {
+                row.col(|ui| {
+                    ui.monospace("NMI Mask: 0b");
+                });
+                row.col(|ui| {
+                    let mut new_nmi_mask_str = format!("{:08b}", self.new_nmi_mask);
+                    ui.add(
+                        TextEdit::singleline(&mut new_nmi_mask_str)
+                            .desired_width(80.0)
+                            .char_limit(8)
+                            .clip_text(false),
+                    );
+                    self.new_nmi_mask = match u8::from_str_radix(new_nmi_mask_str.as_str(), 2) {
+                        Ok(val) => val,
+                        _ => self.new_nmi_mask,
+                    };
+                });
+            });
+
+            body.row(24.0, |mut row| {
+                row.col(|_ui| {});
+                row.col(|ui| {
+                    let mut emulator = self.emulator.lock().unwrap();
+                    if ui
+                        .add_enabled(emulator.is_paused(), egui::Button::new("Update"))
+                        .clicked()
+                    {
+                        emulator.configure_interrupts(
+                            self.new_interrupt_addr as usize,
+                            self.new_irq_mask,
+                            self.new_nmi_mask,
+                        );
+                    }
+                });
+            });
         });
     }
 }

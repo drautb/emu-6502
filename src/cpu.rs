@@ -422,7 +422,7 @@ const PC_MASK: u8 = 0b00000001;
 
 const PNV_MASK: u8 = PN_MASK | PV_MASK;
 
-// const NMI_VECTOR: usize = 0xFFFA;
+const NMI_VECTOR: usize = 0xFFFA;
 const RESET_VECTOR: usize = 0xFFFC;
 const IRQ_VECTOR: usize = 0xFFFE;
 
@@ -451,6 +451,10 @@ pub struct Cpu {
     p: u8,     // processor status
     pc: usize, // program counter
     s: u8,     // stack pointer
+
+    // Interrupt handling
+    irq: bool,
+    nmi: bool,
 }
 
 impl fmt::Debug for Cpu {
@@ -530,6 +534,9 @@ impl Cpu {
             p: 0,
             pc: 0,
             s: 0xFF,
+
+            irq: false,
+            nmi: false,
         }
     }
 
@@ -541,6 +548,17 @@ impl Cpu {
         self.p = 0;
         self.pc = self.deref_mem(mem, RESET_VECTOR) as usize;
         self.s = 0xFF;
+
+        self.irq = false;
+        self.nmi = false;
+    }
+
+    pub fn set_irq(&mut self, val: bool) {
+        self.irq = val;
+    }
+
+    pub fn set_nmi(&mut self, val: bool) {
+        self.nmi = val;
     }
 
     pub fn load_instruction(&mut self, mem: &Memory) {
@@ -548,6 +566,15 @@ impl Cpu {
     }
 
     pub fn step(&mut self, mem: &mut Memory) {
+        if self.p & PI_MASK == 0 {
+            if self.irq {
+                self.handle_interrupt(mem, IRQ_VECTOR);
+            }
+            if self.nmi {
+                self.handle_interrupt(mem, NMI_VECTOR);
+            }
+        }
+
         self.load_instruction(mem);
         let instruction = parse_instruction(self.ir);
         match instruction {
@@ -677,14 +704,8 @@ impl Cpu {
             }
 
             Instruction::BRK(_) => {
-                let return_address = self.pc + 2;
-                self.push_stack(mem, (return_address >> 8) as u8);
-                self.push_stack(mem, return_address as u8);
-                self.push_stack(mem, self.p | P5_MASK | PB_MASK);
-                self.set_status(PI_MASK);
-                self.clear_status(PD_MASK);
                 // BRK uses the vector at $FFFE-$FFFF - http://6502.org/tutorials/interrupts.html#2.2
-                self.pc = self.deref_mem(mem, IRQ_VECTOR) as usize;
+                self.handle_interrupt(mem, IRQ_VECTOR);
             }
 
             Instruction::BVC(_) => {
@@ -1279,6 +1300,16 @@ impl Cpu {
         ((tens / 10) << 4 | ones) as u8
     }
 
+    fn handle_interrupt(&mut self, mem: &mut Memory, interrupt_vector: usize) {
+        let return_address = self.pc + 2;
+        self.push_stack(mem, (return_address >> 8) as u8);
+        self.push_stack(mem, return_address as u8);
+        self.push_stack(mem, self.p | P5_MASK | PB_MASK);
+        self.set_status(PI_MASK);
+        self.clear_status(PD_MASK);
+        self.pc = self.deref_mem(mem, interrupt_vector) as usize;
+    }
+
     fn instruction_length(address_mode: AddressMode) -> usize {
         match address_mode {
             AddressMode::ACC => 1,
@@ -1320,6 +1351,8 @@ mod tests {
             p: 5,
             pc: 6,
             s: 7,
+            irq: true,
+            nmi: true,
         };
         let mem = [0; 65_536];
 

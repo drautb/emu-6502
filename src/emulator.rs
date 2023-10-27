@@ -10,6 +10,10 @@ pub struct Emulator {
     cpu: Cpu,
     memory: Memory,
 
+    interrupt_addr: usize,
+    irq_mask: u8,
+    nmi_mask: u8,
+
     paused: bool,
     step_count: u64,
     pc_breakpoints: Vec<u16>,
@@ -31,7 +35,20 @@ impl Emulator {
             step_count: 0,
             pc_breakpoints: vec![],
             step_breakpoints: vec![],
+            interrupt_addr: 0x0000,
+            irq_mask: 1,
+            nmi_mask: 2,
         }
+    }
+
+    pub fn configure_interrupts(&mut self, interrupt_addr: usize, irq_mask: u8, nmi_mask: u8) {
+        self.interrupt_addr = interrupt_addr;
+        self.irq_mask = irq_mask;
+        self.nmi_mask = nmi_mask;
+    }
+
+    pub fn interrupt_address(&self) -> usize {
+        self.interrupt_addr
     }
 
     pub fn cpu(&self) -> &Cpu {
@@ -48,6 +65,11 @@ impl Emulator {
     }
 
     pub fn clock_tick(&mut self) {
+        self.cpu
+            .set_irq(self.memory[self.interrupt_addr] & self.irq_mask > 0);
+        self.cpu
+            .set_nmi(self.memory[self.interrupt_addr] & self.nmi_mask > 0);
+
         let old_pc = self.cpu().program_counter();
         if !self.is_paused() {
             self.step_cpu();
