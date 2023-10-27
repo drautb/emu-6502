@@ -86,7 +86,7 @@ pub enum Instruction {
 
     LSR(u8, AddressMode), // Logical Shift one bit Right memory or accumulator
 
-    NOP(u8), // No OPeration
+    NOP(u8, usize), // No OPeration, length
 
     ORA(u8, AddressMode), // "OR" memory with Accumulator
 
@@ -139,11 +139,9 @@ pub enum Instruction {
     TYA(u8), // Transfer Y register to the Accumulator
 
     WAI(u8), // WAit for Interrupt
-
-    INVALID, // Unrecognized opcode
 }
 
-fn parse_instruction_internal(opcode: u8) -> Instruction {
+pub fn parse_instruction(opcode: u8) -> Instruction {
     match opcode {
         0x69 => Instruction::ADC(opcode, AddressMode::IMMEDIATE),
         0x6D => Instruction::ADC(opcode, AddressMode::ABS),
@@ -292,7 +290,7 @@ fn parse_instruction_internal(opcode: u8) -> Instruction {
         0x46 => Instruction::LSR(opcode, AddressMode::ZP),
         0x56 => Instruction::LSR(opcode, AddressMode::ZPIX),
 
-        0xEA => Instruction::NOP(opcode),
+        0xEA => Instruction::NOP(opcode, 1),
 
         0x09 => Instruction::ORA(opcode, AddressMode::IMMEDIATE),
         0x0D => Instruction::ORA(opcode, AddressMode::ABS),
@@ -400,24 +398,16 @@ fn parse_instruction_internal(opcode: u8) -> Instruction {
 
         0xCB => Instruction::WAI(opcode),
 
-        _ => Instruction::INVALID,
-    }
-}
+        // Undocumented Opcodes
+        0x03 | 0x0B | 0x13 | 0x1B | 0x23 | 0x2B | 0x33 | 0x3B | 0x43 | 0x4B | 0x53 | 0x5B
+        | 0x63 | 0x6B | 0x73 | 0x7B | 0x83 | 0x8B | 0x93 | 0x9B | 0xA3 | 0xAB | 0xB3 | 0xBB
+        | 0xC3 | 0xD3 | 0xE3 | 0xEB | 0xF3 | 0xFB => Instruction::NOP(opcode, 1),
 
-fn parse_instruction_or_panic(opcode: u8) -> Instruction {
-    match parse_instruction_internal(opcode) {
-        Instruction::INVALID => {
-            println!("Unrecognized opcode! {}", opcode);
-            panic!("Unrecognized opcode!");
+        0x02 | 0x22 | 0x42 | 0x44 | 0x54 | 0x62 | 0x82 | 0xC2 | 0xD4 | 0xE2 | 0xF4 => {
+            Instruction::NOP(opcode, 2)
         }
-        other => other,
-    }
-}
 
-pub fn parse_instruction(opcode: u8) -> Option<Instruction> {
-    match parse_instruction_internal(opcode) {
-        Instruction::INVALID => None,
-        instruction => Some(instruction),
+        0x5C | 0xDC | 0xFC => Instruction::NOP(opcode, 3),
     }
 }
 
@@ -559,7 +549,7 @@ impl Cpu {
 
     pub fn step(&mut self, mem: &mut Memory) {
         self.load_instruction(mem);
-        let instruction = parse_instruction_or_panic(self.ir);
+        let instruction = parse_instruction(self.ir);
         match instruction {
             Instruction::ADC(_, address_mode) => {
                 let n1 = self.a;
@@ -643,6 +633,12 @@ impl Cpu {
                 if self.p & PZ_MASK > 0 {
                     self.update_pc_relative(offset);
                 }
+            }
+
+            Instruction::BIT(_, AddressMode::IMMEDIATE) => {
+                let operand = self.resolve_operand(&AddressMode::IMMEDIATE, mem);
+                self.update_status_z(self.a & operand);
+                self.update_pc(AddressMode::IMMEDIATE)
             }
 
             Instruction::BIT(_, address_mode) => {
@@ -800,8 +796,12 @@ impl Cpu {
                 self.update_pc(address_mode);
             }
 
-            Instruction::NOP(_) | Instruction::STP(_) | Instruction::WAI(_) => {
+            Instruction::NOP(_, 1) | Instruction::STP(_) | Instruction::WAI(_) => {
                 self.incr_pc();
+            }
+
+            Instruction::NOP(_, l) => {
+                self.pc += l;
             }
 
             Instruction::ORA(_, address_mode) => {
@@ -2431,9 +2431,9 @@ mod tests {
         use super::*;
 
         #[test]
-        fn bit_zero() {
+        fn bit_zero_immediate() {
             let (mut cpu, mut mem) = setup(vec![0x89, 0b0000_0000]);
-            cpu.p = PN_MASK | PV_MASK; // Should get cleared
+            cpu.p = PN_MASK | PV_MASK; // Immediate mode doesn't alter N and V
 
             cpu.step(&mut mem);
 
@@ -2442,14 +2442,14 @@ mod tests {
                 Cpu {
                     ir: 0x89,
                     pc: 2,
-                    p: PZ_MASK,
+                    p: PN_MASK | PV_MASK | PZ_MASK,
                     ..Cpu::new()
                 }
             )
         }
 
         #[test]
-        fn bit_nonzero() {
+        fn bit_nonzero_immediate() {
             let (mut cpu, mut mem) = setup(vec![0x89, 0b1100_0001]);
             cpu.a = 0b0000_0001;
             cpu.p = PZ_MASK; // Should get cleared
@@ -2462,7 +2462,6 @@ mod tests {
                     ir: 0x89,
                     pc: 2,
                     a: 1,
-                    p: PN_MASK | PV_MASK,
                     ..Cpu::new()
                 }
             )

@@ -519,12 +519,7 @@ impl Frontend {
     }
 
     fn hover_text(&self, val: u8) -> String {
-        match parse_instruction(val) {
-            Some(instruction) => {
-                format!("{:?}", instruction)
-            }
-            None => "INVALID".to_string(),
-        }
+        format!("{:?}", parse_instruction(val))
     }
 
     pub fn show_breakpoints_window(&mut self, ui: &mut Ui) {
