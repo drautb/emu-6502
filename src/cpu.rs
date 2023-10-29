@@ -455,6 +455,7 @@ pub struct Cpu {
     // Interrupt handling
     irq: bool,
     nmi: bool,
+    prev_nmi: bool,
 }
 
 impl fmt::Debug for Cpu {
@@ -467,6 +468,9 @@ impl fmt::Debug for Cpu {
             .field("p", &format_args!("{:08b}", self.p))
             .field("pc", &format_args!("{:#06X}", self.pc))
             .field("s", &self.s)
+            .field("irq", &self.irq)
+            .field("nmi", &self.nmi)
+            .field("prev_nmi", &self.prev_nmi)
             .finish()
     }
 }
@@ -537,6 +541,7 @@ impl Cpu {
 
             irq: false,
             nmi: false,
+            prev_nmi: false,
         }
     }
 
@@ -551,6 +556,7 @@ impl Cpu {
 
         self.irq = false;
         self.nmi = false;
+        self.prev_nmi = true;
     }
 
     pub fn set_irq(&mut self, val: bool) {
@@ -566,11 +572,12 @@ impl Cpu {
     }
 
     pub fn step(&mut self, mem: &mut Memory) {
-        if self.nmi {
+        if !self.prev_nmi && self.nmi {
             self.handle_interrupt(self.pc, mem, NMI_VECTOR, 0);
         } else if self.p & PI_MASK == 0 && self.irq {
             self.handle_interrupt(self.pc, mem, IRQ_VECTOR, 0);
         }
+        self.prev_nmi = self.nmi;
 
         self.load_instruction(mem);
         let instruction = parse_instruction(self.ir);
@@ -1356,6 +1363,7 @@ mod tests {
             s: 7,
             irq: true,
             nmi: true,
+            prev_nmi: true,
         };
         let mem = [0; 65_536];
 
@@ -1365,6 +1373,7 @@ mod tests {
             cpu,
             Cpu {
                 p: PI_MASK,
+                prev_nmi: true,
                 ..Default::default()
             }
         );
