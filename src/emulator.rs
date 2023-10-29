@@ -28,16 +28,20 @@ impl Default for Emulator {
 
 impl Emulator {
     pub fn new() -> Self {
+        let mut cpu = Cpu::new();
+        let memory = [0; 65_536];
+        cpu.reset(&memory); // Important to set the I flag
+
         Emulator {
-            cpu: Cpu::new(),
-            memory: [0; 65_536],
+            cpu,
+            memory,
             paused: true,
             step_count: 0,
             pc_breakpoints: vec![],
             step_breakpoints: vec![],
             interrupt_addr: 0x0000,
-            irq_mask: 1,
-            nmi_mask: 2,
+            irq_mask: 0x00,
+            nmi_mask: 0x00,
         }
     }
 

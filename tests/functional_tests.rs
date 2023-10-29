@@ -20,9 +20,12 @@ fn run_binary(emulator: &mut Emulator, binary: String, start_mem: usize, start_p
 fn assert_pc(emulator: &Emulator, expected_pc: usize) {
     let actual = emulator.cpu().program_counter();
     assert_eq!(
-        actual, expected_pc,
-        "Actual: {:#06X} Expected: {:#06X}",
-        actual, expected_pc
+        actual,
+        expected_pc,
+        "Actual: {:#06X} Expected: {:#06X} (Step Count: {})",
+        actual,
+        expected_pc,
+        emulator.step_count()
     );
 }
 
@@ -32,7 +35,7 @@ fn functional_test() {
     run_binary(
         &mut emulator,
         "6502_functional_test.bin".to_string(),
-        0,
+        0xA,
         0x400,
     );
 
@@ -45,7 +48,7 @@ fn extended_opcodes_test() {
     run_binary(
         &mut emulator,
         "65C02_extended_opcodes_test.bin".to_string(),
-        0,
+        0xA,
         0x400,
     );
 
@@ -64,5 +67,5 @@ fn interrupt_test() {
         0x400,
     );
 
-    assert_pc(&emulator, 0x06F5);
+    assert_pc(&emulator, 0x0719);
 }

@@ -545,7 +545,7 @@ impl Cpu {
         self.a = 0;
         self.x = 0;
         self.y = 0;
-        self.p = 0;
+        self.p = PI_MASK;
         self.pc = self.deref_mem(mem, RESET_VECTOR) as usize;
         self.s = 0xFF;
 
@@ -566,13 +566,10 @@ impl Cpu {
     }
 
     pub fn step(&mut self, mem: &mut Memory) {
-        if self.p & PI_MASK == 0 {
-            if self.irq {
-                self.handle_interrupt(mem, IRQ_VECTOR);
-            }
-            if self.nmi {
-                self.handle_interrupt(mem, NMI_VECTOR);
-            }
+        if self.nmi {
+            self.handle_interrupt(self.pc, mem, NMI_VECTOR, 0);
+        } else if self.p & PI_MASK == 0 && self.irq {
+            self.handle_interrupt(self.pc, mem, IRQ_VECTOR, 0);
         }
 
         self.load_instruction(mem);
@@ -705,7 +702,7 @@ impl Cpu {
 
             Instruction::BRK(_) => {
                 // BRK uses the vector at $FFFE-$FFFF - http://6502.org/tutorials/interrupts.html#2.2
-                self.handle_interrupt(mem, IRQ_VECTOR);
+                self.handle_interrupt(self.pc + 2, mem, IRQ_VECTOR, PB_MASK);
             }
 
             Instruction::BVC(_) => {
@@ -1300,11 +1297,17 @@ impl Cpu {
         ((tens / 10) << 4 | ones) as u8
     }
 
-    fn handle_interrupt(&mut self, mem: &mut Memory, interrupt_vector: usize) {
-        let return_address = self.pc + 2;
+    fn handle_interrupt(
+        &mut self,
+        return_address: usize,
+        mem: &mut Memory,
+        interrupt_vector: usize,
+        brk_mask: u8,
+    ) {
+        // Return to PC + 2 for BRK instruction, PC for regular interrupts
         self.push_stack(mem, (return_address >> 8) as u8);
         self.push_stack(mem, return_address as u8);
-        self.push_stack(mem, self.p | P5_MASK | PB_MASK);
+        self.push_stack(mem, self.p | P5_MASK | brk_mask);
         self.set_status(PI_MASK);
         self.clear_status(PD_MASK);
         self.pc = self.deref_mem(mem, interrupt_vector) as usize;
@@ -1358,7 +1361,13 @@ mod tests {
 
         cpu.reset(&mem);
 
-        assert_eq!(cpu, Cpu::new());
+        assert_eq!(
+            cpu,
+            Cpu {
+                p: PI_MASK,
+                ..Default::default()
+            }
+        );
     }
 
     mod adc_tests {
