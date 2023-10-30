@@ -926,9 +926,14 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "eframe",
+ "egui",
  "egui_extras",
+ "js-sys",
  "num-traits",
  "rfd",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

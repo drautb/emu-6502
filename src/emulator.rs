@@ -155,6 +155,12 @@ impl Emulator {
             }
         }
     }
+
+    pub fn load_binary_data(&mut self, binary_data: Vec<u8>, start_address: usize) {
+        for (idx, byte) in binary_data.iter().enumerate() {
+            self.memory[start_address + idx] = *byte;
+        }
+    }
 }
 
 #[cfg(test)]

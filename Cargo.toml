@@ -14,6 +14,11 @@ path = "src/bin/gui.rs"
 [dependencies]
 clap = { version = "4.4.6", features = ["derive"] }
 eframe = "0.23.0"
+egui = { version = "0.23.0", features = ["log"] }
 egui_extras = "0.23.0"
+js-sys = "0.3.64"
 num-traits = "0.2.17"
 rfd = "0.12.0"
+wasm-bindgen = "0.2.87"
+wasm-bindgen-futures = "0.4.37"
+web-sys = "0.3.64"

@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::cpu::parse_instruction;
 use crate::emulator::Emulator;
+use crate::file::FileDialog;
 use eframe::egui::{self, TextEdit};
 use eframe::egui::{Button, Ui, Vec2};
 use eframe::epaint::Color32;
@@ -365,8 +366,10 @@ impl Frontend {
 
                         let mut emulator = self.emulator.lock().unwrap();
                         if ui.button("Load Binary").clicked() {
-                            if let Some(path) = rfd::FileDialog::new().pick_file() {
-                                emulator.load_binary(path, self.binary_orig.into());
+                            let mut fd = FileDialog::default();
+                            fd.open();
+                            if let Some(file_data) = fd.get() {
+                                emulator.load_binary_data(file_data, self.binary_orig.into());
                             }
                         }
                     });
